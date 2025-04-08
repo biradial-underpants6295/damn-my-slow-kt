@@ -121,9 +121,7 @@ cron으로 자동 실행하려면 `/etc/crontab`에 직접 등록:
 | 환경 | OS | 상태 |
 |------|-----|------|
 | macOS (Apple Silicon) | macOS 15+ | ✅ 네이티브 실행 |
-| Linux (x86_64) | Ubuntu 22.04+ | ✅ 네이티브 실행 |
-| Synology NAS | DSM 7.x (Docker) | ✅ Playwright 공식 이미지 |
-| GitHub Actions | Ubuntu (Node 20/22/24) | ✅ CI 통과 |
+| GitHub Actions | Ubuntu (Node 20/22/24) | ✅ 웹페이지 로드 CI (속도테스트 프로그램 설치 불가로 속도 측정은 불가능) |
 
 ---
 
