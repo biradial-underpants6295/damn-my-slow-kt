@@ -2,7 +2,14 @@
   "name": "damn-my-slow-kt",
   "version": "0.1.0",
   "description": "KT 인터넷 SLA 속도 미달 시 요금 감면을 자동화하는 CLI 도구",
-  "keywords": ["kt", "sla", "internet", "speed", "automation", "cli"],
+  "keywords": [
+    "kt",
+    "sla",
+    "internet",
+    "speed",
+    "automation",
+    "cli"
+  ],
   "homepage": "https://github.com/kargnas/damn-my-slow-kt",
   "bugs": {
     "url": "https://github.com/kargnas/damn-my-slow-kt/issues"
@@ -22,7 +29,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc",
@@ -36,7 +43,7 @@
     "commander": "^12.0.0",
     "inquirer": "^8.2.6",
     "js-yaml": "^4.1.0",
-    "puppeteer": "^22.0.0"
+    "playwright": "^1.52.0"
   },
   "devDependencies": {
     "@types/inquirer": "^8.2.10",

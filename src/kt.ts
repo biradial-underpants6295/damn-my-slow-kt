@@ -16,7 +16,7 @@
  *   - 로그인 완료 후 SLA 소개 페이지로 복귀
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { Browser, BrowserContext, Page, chromium } from 'playwright';
 import { Config } from './config';
 
 const KT_SLA_INTRO_URL = 'https://speed.kt.com/sla/slatest/introduce.asp';
@@ -54,6 +54,7 @@ function sleep(ms: number): Promise<void> {
 export class KTProvider {
   private config: Config;
   private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
   private page: Page | null = null;
 
   constructor(config: Config) {
@@ -63,7 +64,7 @@ export class KTProvider {
   async run(dryRun = false): Promise<SpeedTestResult> {
     const result = defaultResult();
 
-    this.browser = await puppeteer.launch({
+    this.browser = await chromium.launch({
       headless: this.config.headless,
       args: [
         '--no-sandbox',
@@ -73,15 +74,16 @@ export class KTProvider {
       ],
     });
 
-    try {
-      this.page = await this.browser.newPage();
-
-      await this.page.setUserAgent(
+    this.context = await this.browser.newContext({
+      userAgent:
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
-          'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-          'Chrome/123.0.0.0 Safari/537.36'
-      );
-      await this.page.setViewport({ width: 1280, height: 900 });
+        'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+        'Chrome/123.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 900 },
+    });
+
+    try {
+      this.page = await this.context.newPage();
 
       // Step 1: SLA 소개 페이지 접속
       console.log('KT SLA 소개 페이지 접속 중...');
@@ -147,8 +149,10 @@ export class KTProvider {
         // ignore
       }
     } finally {
+      await this.context?.close();
       await this.browser?.close();
       this.browser = null;
+      this.context = null;
       this.page = null;
     }
 
@@ -278,16 +282,12 @@ export class KTProvider {
 
   private async fillLoginForm(id: string, password: string): Promise<void> {
     const page = this.page!;
+    const idSelector = "input[type='text'], input[type='email'], #userId, input[name='userId']";
+    const passwordSelector = "input[type='password']";
 
     try {
-      await page.waitForSelector(
-        "input[type='text'], input[type='email'], #userId, input[name='userId']",
-        { timeout: 8000 }
-      );
-      await page.type(
-        "input[type='text'], input[type='email'], #userId, input[name='userId']",
-        id
-      );
+      await page.waitForSelector(idSelector, { timeout: 8000 });
+      await page.fill(idSelector, id);
       console.log(`ID 입력: ${id}`);
     } catch {
       console.log('ID 필드 없음');
@@ -295,8 +295,8 @@ export class KTProvider {
     }
 
     try {
-      await page.waitForSelector("input[type='password']", { timeout: 3000 });
-      await page.type("input[type='password']", password);
+      await page.waitForSelector(passwordSelector, { timeout: 3000 });
+      await page.fill(passwordSelector, password);
       console.log('비밀번호 입력 완료');
     } catch {
       console.log('비밀번호 필드 없음');
@@ -529,20 +529,13 @@ export class KTProvider {
     await sleep(3000);
 
     try {
-      await page.waitForSelector(
-        "button:contains('신청'), button:contains('제출'), button:contains('확인')",
-        { timeout: 5000 }
-      );
-      await page.evaluate(() => {
-        const btns = document.querySelectorAll('button');
-        for (const btn of btns) {
-          const text = btn.textContent || '';
-          if (text.includes('신청') || text.includes('제출') || text.includes('확인')) {
-            btn.click();
-            return;
-          }
-        }
-      });
+      const submitButton = page
+        .locator('button')
+        .filter({ hasText: /(신청|제출|확인)/ })
+        .first();
+
+      await submitButton.waitFor({ state: 'visible', timeout: 5000 });
+      await submitButton.click();
       await sleep(3000);
       console.log('이의신청 제출 완료');
       return true;
