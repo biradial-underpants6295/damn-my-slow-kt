@@ -73,7 +73,9 @@ export function buildCli(): Command {
 
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 초기 설정\n'));
       console.log(chalk.yellow('⚠️  KT SLA 측정은 유선(LAN) 연결에서만 유효합니다.'));
-      console.log(chalk.yellow('   Wi-Fi로 측정하면 감면 신청이 거부될 수 있습니다.\n'));
+      console.log(chalk.yellow('   Wi-Fi로 측정하면 감면 신청이 거부될 수 있습니다.'));
+      console.log(chalk.dim(`\n📋 KT 품질보장제도(SLA) 공식 안내:`));
+      console.log(chalk.dim('   https://ermsweb.kt.com/search/faq/faqAnswerM.do?kbId=KNOW0002301063\n'));
 
       const answers = await inquirer.prompt([
         {
