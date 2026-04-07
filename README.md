@@ -87,6 +87,7 @@ npx damn-my-slow-kt@latest init
 - **판정**: 5회 측정 중 3회 이상 미달 → 이의신청 가능
 - **대상**: 유선(LAN) 연결만 (Wi-Fi 제외)
 - **측정**: [speed.kt.com](https://speed.kt.com) KT 공식 SLA 서버
+- **공식 안내**: [KT 초고속 인터넷 품질보장제도(SLA)](https://ermsweb.kt.com/search/faq/faqAnswerM.do?kbId=KNOW0002301063&nodeId=NODE0000000255&parentNodeId=NODE0000000238)
 
 ---
 
