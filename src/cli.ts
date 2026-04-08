@@ -185,10 +185,8 @@ export function buildCli(): Command {
         console.log(`  npx damn-my-slow-kt schedule install`);
       }
 
-      console.log('\n이제 실행하세요:');
+      console.log(chalk.dim('\n지금 테스트하려면 실행해보세요:'));
       console.log(chalk.bold('  npx damn-my-slow-kt run'));
-      console.log(chalk.gray('\n  또는 글로벌 설치 후 직접 실행:'));
-      console.log(chalk.gray('  npm install -g damn-my-slow-kt && damn-my-slow-kt run'));
     });
 
   // ─────────────────────────────────────
