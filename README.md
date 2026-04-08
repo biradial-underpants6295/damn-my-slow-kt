@@ -92,6 +92,50 @@ npx damn-my-slow-kt@latest init
 
 ## 요구사항
 
-- Node.js 20+
+- Node.js 20+ (22+ 권장 — native SQLite 지원)
 - KT 인터넷 계정
 - 유선(LAN) 연결
+
+---
+
+## 개발 (Contributing)
+
+### 기술 스택
+| Component | Technology |
+|-----------|-----------|
+| Language | TypeScript (ES2020, CommonJS, strict) |
+| CLI | Commander + Inquirer + Chalk v4 |
+| Browser | Playwright (headless Chromium) |
+| Storage | node:sqlite (Node 22+) / JSON fallback |
+| Config | YAML — `~/.damn-my-slow-isp/config-kt.yaml` |
+| Lint | ESLint + typescript-eslint |
+| Test | Vitest |
+| CI | GitHub Actions (Node 20 + 22 matrix) |
+
+### 개발 환경 설정
+
+```bash
+git clone https://github.com/kargnas/damn-my-slow-kt.git
+cd damn-my-slow-kt
+npm install
+npx playwright install chromium
+npm run build
+```
+
+### 명령어
+
+| Command | Description |
+|---------|-------------|
+| `npm run build` | TypeScript 컴파일 |
+| `npm run typecheck` | 타입 체크 (`tsc --noEmit`) |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest 단위 테스트 |
+| `npm run dev` | ts-node 개발 모드 |
+
+### 기여 방법
+1. 새 브랜치에서 작업: `git checkout -b feat/my-feature`
+2. 커밋 전 반드시 확인: `npm run typecheck && npm run lint && npm run build && npm test`
+3. PR 생성 (main 브랜치 대상)
+4. 커밋 메시지: 한국어 conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
+
+> AI 에이전트로 개발 환경을 구성하려면 [README.ai-ready.md](./README.ai-ready.md) 참고
