@@ -38,21 +38,57 @@ export function getPlatform(): 'macos' | 'linux' | 'windows' | 'unknown' {
   return 'unknown';
 }
 
-function getCliPath(): string {
-  // npx 실행 시 process.argv[1]에 CLI 스크립트 경로가 있음
-  const scriptPath = process.argv[1];
-  if (scriptPath && scriptPath.includes('damn-my-slow-kt')) {
-    return scriptPath;
-  }
+/**
+ * npx 임시 캐시 경로인지 판별.
+ * npx는 _npx/ 디렉토리 아래에 임시 설치하므로, launchd/cron에 이 경로를 기록하면
+ * 세션 종료 후 파일이 사라져 실행 실패한다.
+ */
+function isNpxTempPath(p: string): boolean {
+  return p.includes('/_npx/') || p.includes('\\_npx\\');
+}
 
-  // 글로벌 설치 시 which 명령으로 찾기
+interface CliExec {
+  /** 실행 바이너리 (npx 모드면 npx 절대경로, 아니면 CLI 절대경로) */
+  program: string;
+  /** program 뒤에 붙는 인자 (npx 모드면 ['--yes', 'damn-my-slow-kt']) */
+  prefixArgs: string[];
+  /** npx 모드 여부 */
+  isNpx: boolean;
+}
+
+function getCliExec(): CliExec {
+  // 1) 글로벌 설치 경로 확인
   try {
-    const which = execSync('which damn-my-slow-kt 2>/dev/null', { encoding: 'utf8' }).trim();
-    if (which) return which;
+    const globalPath = execSync('which damn-my-slow-kt 2>/dev/null', { encoding: 'utf8' }).trim();
+    if (globalPath && !isNpxTempPath(globalPath)) {
+      return { program: globalPath, prefixArgs: [], isNpx: false };
+    }
   } catch {
     // ignore
   }
 
+  // 2) process.argv[1]이 안정적 경로(글로벌 or 로컬 node_modules)인 경우
+  const scriptPath = process.argv[1];
+  if (scriptPath && scriptPath.includes('damn-my-slow-kt') && !isNpxTempPath(scriptPath)) {
+    return { program: scriptPath, prefixArgs: [], isNpx: false };
+  }
+
+  // 3) npx 모드 - npx 바이너리 절대경로를 찾아서 사용
+  let npxPath = 'npx';
+  try {
+    npxPath = execSync('which npx 2>/dev/null', { encoding: 'utf8' }).trim() || 'npx';
+  } catch {
+    // fallback
+  }
+  return { program: npxPath, prefixArgs: ['--yes', 'damn-my-slow-kt'], isNpx: true };
+}
+
+/** 사용자 안내용 실행 명령어 문자열 */
+export function getRunCommand(): string {
+  const exec = getCliExec();
+  if (exec.isNpx) {
+    return 'npx damn-my-slow-kt';
+  }
   return 'damn-my-slow-kt';
 }
 
@@ -62,13 +98,17 @@ function getCliPath(): string {
 
 function buildLaunchdPlist(config: Config): string {
   const [hour, minute] = config.schedule.time.split(':');
-  const cliPath = getCliPath();
+  const exec = getCliExec();
   const configPath = path.resolve('config.yaml');
   const logDir = path.join(os.homedir(), '.damn-my-slow-kt');
   const logPath = path.join(logDir, 'run.log');
   const errPath = path.join(logDir, 'run.error.log');
 
   fs.mkdirSync(logDir, { recursive: true });
+
+  // ProgramArguments: [program, ...prefixArgs, 'run', '--config', configPath]
+  const args = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath];
+  const argsXml = args.map((a) => `    <string>${a}</string>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -79,10 +119,7 @@ function buildLaunchdPlist(config: Config): string {
   <string>com.damn-my-slow-kt</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${cliPath}</string>
-    <string>run</string>
-    <string>--config</string>
-    <string>${configPath}</string>
+${argsXml}
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -165,18 +202,21 @@ export function installLinux(config: Config): void {
 
 function installSystemd(config: Config): void {
   const [hour, minute] = config.schedule.time.split(':');
-  const cliPath = getCliPath();
+  const exec = getCliExec();
   const configPath = path.resolve('config.yaml');
 
   const serviceDir = path.dirname(SYSTEMD_SERVICE_PATH);
   fs.mkdirSync(serviceDir, { recursive: true });
+
+  // ExecStart: program prefixArgs... run --config configPath
+  const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
 
   const serviceContent = `[Unit]
 Description=damn-my-slow-kt KT SLA Speed Test
 
 [Service]
 Type=oneshot
-ExecStart=${cliPath} run --config ${configPath}
+ExecStart=${execCmd}
 StandardOutput=journal
 StandardError=journal
 `;
@@ -206,13 +246,14 @@ WantedBy=timers.target
 
 function installCron(config: Config): void {
   const [hour, minute] = config.schedule.time.split(':');
-  const cliPath = getCliPath();
+  const exec = getCliExec();
   const configPath = path.resolve('config.yaml');
   const logPath = path.join(os.homedir(), '.damn-my-slow-kt', 'cron.log');
 
+  const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
   const cronLine =
     `${minute} ${hour} * * * ` +
-    `${cliPath} run --config ${configPath} >> ${logPath} 2>&1 ${CRON_COMMENT}`;
+    `${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`;
 
   let existing = '';
   try {
@@ -287,7 +328,7 @@ export function installSchedule(config: Config): void {
     console.log('Windows에서는 작업 스케줄러(Task Scheduler)를 사용하세요:');
     console.log('1. Win + R → taskschd.msc 입력');
     console.log('2. 기본 작업 만들기 클릭');
-    console.log(`3. 프로그램: damn-my-slow-kt run --config ${path.resolve('config.yaml')}`);
+    console.log(`3. 프로그램: npx --yes damn-my-slow-kt run --config ${path.resolve('config.yaml')}`);
     console.log(`4. 트리거: 매일 ${config.schedule.time}`);
   } else {
     throw new Error(`지원하지 않는 플랫폼: ${platform}`);

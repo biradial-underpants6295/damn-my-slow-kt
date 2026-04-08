@@ -201,11 +201,13 @@ export function buildCli(): Command {
         }
       } else if (platform === 'windows') {
         console.log('\nWindows에서는 작업 스케줄러를 수동으로 설정하세요:');
-        console.log(`  damn-my-slow-kt schedule install`);
+        console.log(`  npx damn-my-slow-kt schedule install`);
       }
 
       console.log('\n이제 실행하세요:');
-      console.log(chalk.bold('  damn-my-slow-kt run'));
+      console.log(chalk.bold('  npx damn-my-slow-kt run'));
+      console.log(chalk.gray('\n  또는 글로벌 설치 후 직접 실행:'));
+      console.log(chalk.gray('  npm install -g damn-my-slow-kt && damn-my-slow-kt run'));
     });
 
   // ─────────────────────────────────────
