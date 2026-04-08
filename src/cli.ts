@@ -627,17 +627,6 @@ function printRunResult(
       `  ⬇ 다운로드  ${speedBar(record.download_mbps, contractSpeed, 20)}` +
       headerColor("  │"),
   );
-  console.log(
-    headerColor("  │") +
-      `  ⬆ 업로드    ${speedBar(record.upload_mbps, contractSpeed, 20)}` +
-      headerColor("  │"),
-  );
-  console.log(
-    headerColor("  │") +
-      `  ⏱ Ping      ${chalk.bold(record.ping_ms.toFixed(0))} ms` +
-      " ".repeat(Math.max(0, 31 - record.ping_ms.toFixed(0).length)) +
-      headerColor("│"),
-  );
 
   // 이의신청 결과
   if (

@@ -26,9 +26,7 @@ export function formatRecord(record: SpeedRecord): string {
   return (
     `**인터넷 속도 측정 결과** (${record.measured_at.slice(0, 16)})\n` +
     `${slaEmoji} SLA: ${record.sla_result.toUpperCase()}\n` +
-    `⬇️ 다운로드: ${record.download_mbps.toFixed(1)} Mbps\n` +
-    `⬆️ 업로드: ${record.upload_mbps.toFixed(1)} Mbps\n` +
-    `🏓 Ping: ${record.ping_ms.toFixed(0)} ms` +
+    `⬇️ 다운로드: ${record.download_mbps.toFixed(1)} Mbps` +
     complaintInfo
   );
 }
