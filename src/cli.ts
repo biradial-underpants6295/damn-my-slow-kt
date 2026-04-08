@@ -16,6 +16,7 @@ import { Command } from 'commander';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import path from 'path';
+import { execSync } from 'child_process';
 import fs from 'fs';
 
 import {
@@ -23,6 +24,7 @@ import {
   saveConfig,
   getDefaultConfig,
   DEFAULT_CONFIG_PATH,
+  DATA_DIR,
   Config,
 } from './config';
 import { SpeedDatabase } from './db';
@@ -316,7 +318,7 @@ export function buildCli(): Command {
       db.save(record);
       db.close();
 
-      printRunResult(record);
+      printRunResult(record, cfg.plan.speed_mbps);
       await sendNotifications(cfg, record);
 
       if (result.complaint_result === 'success') {
@@ -327,6 +329,9 @@ export function buildCli(): Command {
         console.error(`\n${chalk.red(`⚠️  오류 발생: ${result.error}`)}`);
         process.exit(1);
       }
+
+      // GitHub 스타 요청 (interactive + 첫 실행 시에만)
+      await askForStar();
     });
 
   // ─────────────────────────────────────
@@ -455,6 +460,22 @@ export function buildCli(): Command {
   return program;
 }
 
+// ─── 속도 바 시각화 ─────────────────────────────────────────────
+
+/** 터미널 너비에 맞춘 속도 게이지 바 */
+function speedBar(mbps: number, maxMbps: number, width = 30): string {
+  const ratio = Math.min(mbps / maxMbps, 1);
+  const filled = Math.round(ratio * width);
+  const empty = width - filled;
+
+  // 속도 비율에 따른 색상: <30% 빨강, <50% 노랑, >=50% 초록
+  const colorFn = ratio < 0.3 ? chalk.red : ratio < 0.5 ? chalk.yellow : chalk.green;
+  const bar = colorFn('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
+  const pct = `${(ratio * 100).toFixed(0)}%`;
+
+  return `${bar} ${chalk.bold(`${mbps.toFixed(1)}`)} Mbps ${chalk.dim(`(${pct})`)}`;
+}
+
 function printRunResult(record: {
   sla_result: string;
   download_mbps: number;
@@ -462,27 +483,92 @@ function printRunResult(record: {
   ping_ms: number;
   complaint_filed: boolean;
   complaint_result: string;
-}): void {
-  const slaColor =
-    record.sla_result === 'pass'
-      ? chalk.green
-      : record.sla_result === 'fail'
-      ? chalk.red
-      : chalk.yellow;
-  const slaIcon =
-    record.sla_result === 'pass' ? '✅' : record.sla_result === 'fail' ? '❌' : '⚠️';
+}, contractSpeed = 1000): void {
+  const isFail = record.sla_result === 'fail';
+  const isPass = record.sla_result === 'pass';
 
-  console.log('\n' + chalk.bold('측정 결과:'));
-  console.log(`  ⬇️  다운로드: ${chalk.bold(`${record.download_mbps.toFixed(1)} Mbps`)}`);
-  console.log(`  ⬆️  업로드:   ${chalk.bold(`${record.upload_mbps.toFixed(1)} Mbps`)}`);
-  console.log(`  🏓 Ping:     ${record.ping_ms.toFixed(0)} ms`);
-  console.log(`  ${slaIcon}  SLA:      ${slaColor(record.sla_result.toUpperCase())}`);
+  // 상단 구분선
+  const headerColor = isFail ? chalk.red : isPass ? chalk.green : chalk.yellow;
+  const headerIcon = isFail ? '❌' : isPass ? '✅' : '⚠️';
+  const headerText = isFail ? 'SLA 미달' : isPass ? 'SLA 통과' : 'SLA 불명';
 
-  if (record.complaint_filed) {
-    const resultColor =
-      record.complaint_result === 'success' ? chalk.green : chalk.red;
-    console.log(`  🔔 이의신청: ${resultColor(record.complaint_result)}`);
-  } else if (record.sla_result === 'fail' && record.complaint_result === 'skipped') {
-    console.log(`  🔔 이의신청: ${chalk.dim('생략됨 (dry-run)')}`);
+  console.log('');
+  console.log(headerColor(`  ┌${'─'.repeat(46)}┐`));
+  console.log(headerColor(`  │`) + `  ${headerIcon}  ${chalk.bold(headerText)}` + ' '.repeat(46 - headerText.length * 2 - 6) + headerColor('│'));
+  console.log(headerColor(`  ├${'─'.repeat(46)}┤`));
+
+  // 속도 게이지
+  console.log(headerColor('  │') + `  ⬇ 다운로드  ${speedBar(record.download_mbps, contractSpeed, 20)}` + headerColor('  │'));
+  console.log(headerColor('  │') + `  ⬆ 업로드    ${speedBar(record.upload_mbps, contractSpeed, 20)}` + headerColor('  │'));
+  console.log(headerColor('  │') + `  ⏱ Ping      ${chalk.bold(record.ping_ms.toFixed(0))} ms` + ' '.repeat(Math.max(0, 31 - record.ping_ms.toFixed(0).length)) + headerColor('│'));
+
+  // 이의신청 결과
+  if (record.complaint_filed || (isFail && record.complaint_result === 'skipped')) {
+    console.log(headerColor(`  ├${'─'.repeat(46)}┤`));
+
+    if (record.complaint_result === 'success') {
+      console.log(headerColor('  │') + chalk.green('  🎉 감면 신청 성공!') + ' '.repeat(27) + headerColor('│'));
+    } else if (record.complaint_result === 'failed') {
+      console.log(headerColor('  │') + chalk.red('  ⚠️  감면 신청 실패') + ' '.repeat(27) + headerColor('│'));
+    } else if (record.complaint_result === 'skipped') {
+      console.log(headerColor('  │') + chalk.dim('  📋 감면 신청 생략 (dry-run)') + ' '.repeat(19) + headerColor('│'));
+    }
+  }
+
+  console.log(headerColor(`  └${'─'.repeat(46)}┘`));
+}
+
+// ─── GitHub Star 요청 ─────────────────────────────────────────────
+
+const STAR_FLAG_FILE = path.join(DATA_DIR, '.star-asked');
+const REPO = 'kargnas/damn-my-slow-kt';
+
+/**
+ * 첫 실행 시 한 번만 GitHub 스타 여부를 물어본다.
+ * gh CLI가 없거나 non-interactive면 조용히 스킵.
+ */
+async function askForStar(): Promise<void> {
+  // interactive가 아니면 스킵
+  if (!process.stdout.isTTY) return;
+
+  // 이미 물어본 적 있으면 스킵
+  if (fs.existsSync(STAR_FLAG_FILE)) return;
+
+  // 플래그 먼저 기록 (다시 묻지 않기 위해)
+  try {
+    fs.mkdirSync(path.dirname(STAR_FLAG_FILE), { recursive: true });
+    fs.writeFileSync(STAR_FLAG_FILE, new Date().toISOString(), 'utf8');
+  } catch {
+    return;
+  }
+
+  // gh CLI 존재 확인
+  try {
+    execSync('which gh 2>/dev/null', { stdio: 'ignore' });
+  } catch {
+    return;
+  }
+
+  console.log('');
+  const { star } = await inquirer.prompt([{
+    type: 'confirm',
+    name: 'star',
+    message: `도움이 됐다면 GitHub에 ⭐ 하나 남겨주시겠어요? (${REPO})`,
+    default: true,
+  }]);
+
+  if (star) {
+    try {
+      execSync(`gh repo edit ${REPO} --star 2>/dev/null`, { stdio: 'ignore' });
+      console.log(chalk.green('⭐ 감사합니다!'));
+    } catch {
+      // gh api로 fallback
+      try {
+        execSync(`gh api -X PUT /user/starred/${REPO} 2>/dev/null`, { stdio: 'ignore' });
+        console.log(chalk.green('⭐ 감사합니다!'));
+      } catch {
+        console.log(chalk.dim(`직접 스타해주세요: https://github.com/${REPO}`));
+      }
+    }
   }
 }
