@@ -17,6 +17,7 @@
  */
 
 import { Browser, BrowserContext, Page, chromium } from 'playwright';
+import { execSync } from 'child_process';
 import { Config } from './config';
 import chalk from 'chalk';
 
@@ -104,15 +105,35 @@ export class KTProvider {
   async run(dryRun = false): Promise<SpeedTestResult> {
     const result = defaultResult();
 
-    this.browser = await chromium.launch({
-      headless: this.config.headless,
-      args: [
-        '--no-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--use-fake-ui-for-media-stream',
-        '--disable-web-security',
-      ],
-    });
+    // Playwright 브라우저 바이너리가 없으면 자동 설치 (npx 첫 실행 시 필요)
+    try {
+      this.browser = await chromium.launch({
+        headless: this.config.headless,
+        args: [
+          '--no-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--use-fake-ui-for-media-stream',
+          '--disable-web-security',
+        ],
+      });
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e : new Error(String(e));
+      if (err.message.includes("Executable doesn't exist")) {
+        console.log('📦 Chromium 브라우저 설치 중... (최초 1회)');
+        execSync('npx playwright install chromium', { stdio: 'inherit' });
+        this.browser = await chromium.launch({
+          headless: this.config.headless,
+          args: [
+            '--no-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--use-fake-ui-for-media-stream',
+            '--disable-web-security',
+          ],
+        });
+      } else {
+        throw e;
+      }
+    }
 
     this.context = await this.browser.newContext({
       userAgent:
