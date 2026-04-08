@@ -79,10 +79,8 @@ jobs:
           git tag "v${{ steps.bump.outputs.version }}"
           git push origin HEAD:${{ github.ref_name }} --tags
 
-      - name: Publish to npm
+      - name: Publish to npm (Trusted Publishers OIDC)
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         env:

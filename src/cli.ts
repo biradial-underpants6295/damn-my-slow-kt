@@ -177,7 +177,15 @@ export function buildCli(): Command {
             installSchedule(cfg);
           } catch (e: unknown) {
             const err = e instanceof Error ? e : new Error(String(e));
-            console.error(chalk.red(`스케줄 설치 실패: ${err.message}`));
+            console.log('');
+            console.log(chalk.yellow('⚠️  설정 저장은 완료되었으나, 자동 스케줄 등록에 실패했습니다.'));
+            console.log(chalk.dim(`   원인: ${err.message}`));
+            console.log('');
+            console.log('   수동으로 실행하려면:');
+            console.log(chalk.bold('     npx --yes damn-my-slow-kt run'));
+            console.log('');
+            console.log('   스케줄을 다시 등록하려면:');
+            console.log(chalk.bold('     npx --yes damn-my-slow-kt schedule install'));
           }
         }
       } else if (platform === 'windows') {
