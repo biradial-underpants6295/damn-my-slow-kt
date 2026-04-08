@@ -40,6 +40,8 @@ export interface Notification {
 export interface Config {
   _config_version: number;
   credentials: Credentials;
+  /** 이의신청 시 연락처 */
+  phone: string;
   plan: Plan;
   schedule: Schedule;
   notification: Notification;
@@ -53,6 +55,7 @@ export function getDefaultConfig(): Config {
   return {
     _config_version: 3,
     credentials: { id: '', password: '' },
+    phone: '',
     plan: { speed_mbps: 1000 },
     schedule: {
       time: '04:00',
@@ -94,6 +97,7 @@ export function loadConfig(configPath?: string): Config {
       id: creds.id || '',
       password: creds.password || '',
     },
+    phone: String(raw.phone || ''),
     plan: {
       speed_mbps: Number(plan.speed_mbps || 1000),
     },
@@ -126,6 +130,7 @@ export function saveConfig(config: Config, configPath?: string): void {
       id: config.credentials.id,
       password: config.credentials.password,
     },
+    phone: config.phone,
     plan: {
       speed_mbps: config.plan.speed_mbps,
     },

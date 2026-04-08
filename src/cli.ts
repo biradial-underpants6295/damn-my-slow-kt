@@ -108,10 +108,14 @@ export function buildCli(): Command {
           validate: (v: string) => v.trim() !== "" || "비밀번호를 입력하세요.",
         },
         {
-          type: "number",
-          name: "speed_mbps",
-          message: "계약 속도 (Mbps):",
-          default: 1000,
+          type: "input",
+          name: "phone",
+          message: "연락처 (휴대폰 번호 — 이의신청 시 필요):",
+          default: "",
+          validate: (v: string) => {
+            if (!v.trim()) return true; // 선택사항
+            return /^01[0-9]{8,9}$/.test(v.replace(/-/g, "")) || "올바른 휴대폰 번호를 입력하세요. (예: 01012345678)";
+          },
         },
         {
           type: "input",
@@ -150,7 +154,8 @@ export function buildCli(): Command {
       const cfg: Config = {
         _config_version: defaults._config_version,
         credentials: { id: answers.id, password: answers.password },
-        plan: { speed_mbps: answers.speed_mbps },
+        phone: answers.phone ? answers.phone.replace(/-/g, "") : "",
+        plan: { speed_mbps: defaults.plan.speed_mbps },
         schedule: {
           time: "04:00",
           timezone: "Asia/Seoul",

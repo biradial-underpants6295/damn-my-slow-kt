@@ -18,7 +18,9 @@
 
 import { Browser, BrowserContext, Page, chromium } from 'playwright';
 import { execSync } from 'child_process';
-import { Config } from './config';
+import fs from 'fs';
+import path from 'path';
+import { Config, DATA_DIR } from './config';
 import chalk from 'chalk';
 
 const KT_SLA_INTRO_URL = 'https://speed.kt.com/sla/slatest/introduce.asp';
@@ -455,12 +457,41 @@ export class KTProvider {
     } else {
       info('측정 시작 대기 중...');
     }
+
+    // 단말 정보 출력 — 페이지 하단의 품질측정 단말정보
+    const deviceInfo = await page.evaluate(() => {
+      const ifArea = document.getElementById('ifArea');
+      if (!ifArea) return null;
+      const text = ifArea.textContent || '';
+      const osMatch = text.match(/OS\s+([\s\S]*?)(?=CPU)/);
+      const cpuMatch = text.match(/CPU\s+([\s\S]*?)(?=RAM)/);
+      const ramMatch = text.match(/RAM\s+([\s\S]*?)(?=Browser)/);
+      const browserMatch = text.match(/Browser\s+([\s\S]*?)(?=재측정|$)/);
+      return {
+        os: osMatch ? osMatch[1].trim() : '',
+        cpu: cpuMatch ? cpuMatch[1].trim() : '',
+        ram: ramMatch ? ramMatch[1].trim() : '',
+        browser: browserMatch ? browserMatch[1].trim() : '',
+      };
+    });
+
+    if (deviceInfo && deviceInfo.os) {
+      info(chalk.cyan('품질측정 단말정보:'));
+      info(`  OS: ${deviceInfo.os}`);
+      info(`  CPU: ${deviceInfo.cpu}`);
+      info(`  RAM: ${deviceInfo.ram}`);
+      info(`  Browser: ${deviceInfo.browser}`);
+    }
+
+    // HTML 캡처 저장 (디버그/증거용)
+    await this.saveHtmlSnapshot('measurement-start');
   }
 
   private async waitForCompletion(): Promise<void> {
     const page = this.page!;
     const maxWaitMs = SLA_TEST_TIMEOUT_MS;
     let elapsed = 0;
+    let lastReportedRound = 0; // 이미 출력한 라운드 추적
 
     while (elapsed < maxWaitMs) {
       await sleep(POLL_INTERVAL_MS);
@@ -471,14 +502,17 @@ export class KTProvider {
         const ifArea = document.getElementById('ifArea');
         if (!ifArea) return null;
 
-        // 완료된 회차 수 — 측정값이 채워진 행 카운트
-        let completedRounds = 0;
+        // 회차별 상세 결과
+        const rounds: Array<{ speed: string; slaRef: string; result: string; date: string }> = [];
         for (let i = 1; i <= 5; i++) {
-          const speedEl = ifArea.querySelector(`.step-table-speed-${i}`);
-          if (speedEl && speedEl.textContent?.trim()) {
-            completedRounds++;
-          }
+          const speed = ifArea.querySelector(`.step-table-speed-${i}`)?.textContent?.trim() || '';
+          const slaRef = ifArea.querySelector(`.step-table-default-${i}`)?.textContent?.trim() || '';
+          const resultText = ifArea.querySelector(`.step-table-result-${i}`)?.textContent?.trim() || '';
+          const date = ifArea.querySelector(`.step-table-date-${i}`)?.textContent?.trim() || '';
+          rounds.push({ speed, slaRef, result: resultText, date });
         }
+
+        const completedRounds = rounds.filter(r => r.speed).length;
 
         // "측정중" 상태 확인
         const fullText = ifArea.textContent?.replace(/\s+/g, ' ').trim() || '';
@@ -491,7 +525,7 @@ export class KTProvider {
         const totalMatch = fullText.match(/테스트\s*횟수\s*(\d+)\s*번/);
         const totalCount = totalMatch ? parseInt(totalMatch[1]) : 0;
 
-        return { completedRounds, isMeasuring, countdown, totalCount, textSnippet: fullText.slice(0, 200) };
+        return { rounds, completedRounds, isMeasuring, countdown, totalCount, textSnippet: fullText.slice(0, 200) };
       });
 
       if (!status) continue;
@@ -501,18 +535,34 @@ export class KTProvider {
         console.log(`  text: ${status.textSnippet}`);
       }
 
-      // 진행률 표시 — CSS 기반 완료 회차 수 우선, fallback으로 텍스트 파싱
+      // 새로 완료된 라운드가 있으면 즉시 결과 출력
+      if (status.completedRounds > lastReportedRound) {
+        for (let i = lastReportedRound; i < status.completedRounds; i++) {
+          const r = status.rounds[i];
+          const isFail = r.result.includes('미달');
+          const icon = isFail ? '❌' : '✅';
+          if (process.stdout.isTTY) console.log(''); // 진행 바 줄바꿈
+          info(`${icon} ${i + 1}회차: ${r.speed} (기준 ${r.slaRef}) → ${r.result}  [${r.date}]`);
+        }
+        lastReportedRound = status.completedRounds;
+
+        // HTML 스냅샷 저장
+        await this.saveHtmlSnapshot(`round-${status.completedRounds}`);
+      }
+
       const roundsDone = status.completedRounds || status.totalCount;
 
-      if (roundsDone >= 5 && !status.isMeasuring) {
+      // 완료 조건: 5개 회차의 측정값이 모두 채워짐
+      // (페이지가 "측정중" 텍스트를 유지하더라도, 5개 속도값이 있으면 완료)
+      if (status.completedRounds >= 5) {
         measureProgress(5, 5, elapsed);
         if (process.stdout.isTTY) console.log('');
         info('5회 측정 완료!');
+        await this.saveHtmlSnapshot('complete');
         break;
       } else if (roundsDone > 0) {
         measureProgress(roundsDone, 5, elapsed);
         if (status.countdown) {
-          // 카운트다운은 TTY에서만 같은 줄에 표시
           if (process.stdout.isTTY) {
             process.stdout.write(chalk.dim(` 다음: ${status.countdown}`));
           }
@@ -523,6 +573,7 @@ export class KTProvider {
     if (elapsed >= maxWaitMs) {
       if (process.stdout.isTTY) console.log('');
       info(chalk.yellow(`⏰ ${Math.round(maxWaitMs / 60000)}분 타임아웃 - 현재 결과로 진행`));
+      await this.saveHtmlSnapshot('timeout');
     }
   }
 
@@ -606,7 +657,6 @@ export class KTProvider {
 
       // 개별 라운드 결과 출력
       for (const round of parsed.rounds) {
-        const speedNum = parseFloat(round.speed);
         const isFail = round.result.includes('미달');
         const icon = isFail ? '❌' : '✅';
         info(`  ${icon} ${round.speed} (기준: ${round.slaRef}) → ${round.result}`);
@@ -629,47 +679,150 @@ export class KTProvider {
     return result;
   }
 
+  /**
+   * 5회 측정 완료 후 "속도측정 상세이력" 다이얼로그가 자동으로 뜸.
+   * 다이얼로그에서:
+   * 1. 측정 결과 상세 정보를 CLI에 출력 (증거)
+   * 2. 전화번호를 입력 (config.phone)
+   * 3. "확인" 버튼 클릭 → 이의신청(품질점검 신청) 완료
+   */
   private async fileComplaint(): Promise<boolean> {
     const page = this.page!;
 
-    const clickResult = await page.evaluate(() => {
-      const elements = document.querySelectorAll('a, button');
-      for (const el of elements) {
-        if ((el.textContent || '').includes('이의신청')) {
-          (el as HTMLElement).click();
-          return 'clicked: ' + el.textContent?.trim();
+    // 상세이력 다이얼로그가 열릴 때까지 대기
+    try {
+      await page.waitForSelector('.slaTestResultDetailPopup', { state: 'visible', timeout: 30000 });
+    } catch {
+      info('상세이력 다이얼로그가 열리지 않았습니다');
+      return false;
+    }
+
+    await sleep(2000);
+    await this.saveHtmlSnapshot('complaint-dialog');
+
+    // 상세이력 정보를 CLI에 출력
+    const detail = await page.evaluate(() => {
+      const popup = document.querySelector('.slaTestResultDetailPopup');
+      if (!popup) return null;
+
+      // 요약 테이블 (test_table type1) 파싱
+      const summaryRows = popup.querySelectorAll('.test_table.type1 tr');
+      const summary: Record<string, string> = {};
+      summaryRows.forEach(row => {
+        const th = row.querySelector('th')?.textContent?.trim() || '';
+        const td = row.querySelector('td')?.textContent?.trim() || '';
+        if (th) summary[th] = td;
+      });
+
+      // 회차별 속도 테이블 (test_table type3) 파싱
+      const speedRows = popup.querySelectorAll('.test_table.type3 tbody tr');
+      const rounds: Array<{ round: string; speed: string }> = [];
+      speedRows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 2) {
+          rounds.push({
+            round: cells[0].textContent?.trim() || '',
+            speed: cells[1].textContent?.trim() || '',
+          });
         }
-      }
-      return 'not found';
+      });
+
+      return { summary, rounds };
     });
 
-    info(`이의신청 버튼: ${clickResult.includes('not found') ? '없음' : '클릭'}`);
+    if (detail) {
+      console.log('');
+      info(chalk.cyan('━━━ SLA 테스트 결과 상세 ━━━'));
+      info(`  측정일자:    ${detail.summary['측정일자'] || '-'}`);
+      info(`  상품명:      ${detail.summary['상품명'] || '-'}`);
+      info(`  SLA기준속도: ${detail.summary['SLA기준속도'] || '-'}`);
+      info(`  측정횟수:    ${detail.summary['측정횟수'] || '-'}`);
+      info(`  미달횟수:    ${detail.summary['미달횟수'] || '-'}`);
+      info(`  결과:        ${detail.summary['결 과'] || '-'}`);
+      info('');
+      info('  회차별 다운로드 속도:');
+      for (const r of detail.rounds) {
+        info(`    ${r.round}회차: ${r.speed} Mbps`);
+      }
+      info(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+    }
 
-    if (clickResult.includes('not found')) {
+    // 전화번호 입력 — config.phone에서 가져옴
+    const phone = this.config.phone || '';
+    if (!phone) {
+      info(chalk.yellow('전화번호가 설정되지 않아 이의신청을 진행할 수 없습니다.'));
+      info(chalk.dim('설정 파일에 phone: "01012345678" 을 추가하세요.'));
+      return false;
+    }
+
+    // 010-XXXX-XXXX 형태로 파싱
+    const digits = phone.replace(/-/g, '');
+    const prefix = digits.slice(0, 3);  // 010
+    const mid = digits.slice(3, 7);     // 중간 4자리
+    const last = digits.slice(7, 11);   // 끝 4자리
+
+    info(`연락처 입력: ${prefix}-${mid}-${last}`);
+
+    // 휴대폰 라디오 선택 (기본이 hp이지만 명시적으로)
+    await page.evaluate(() => {
+      const hpRadio = document.querySelector('input[type="radio"][value="hp"]') as HTMLInputElement;
+      if (hpRadio) {
+        const label = hpRadio.closest('label');
+        if (label) label.click();
+      }
+    });
+
+    // 중간번호, 끝번호 입력
+    try {
+      await page.fill('input[name="telnum2"]', mid);
+      await page.fill('input[name="telnum3"]', last);
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e : new Error(String(e));
+      info(chalk.red(`전화번호 입력 실패: ${err.message}`));
+      return false;
+    }
+
+    await sleep(1000);
+
+    // "확인" 버튼 클릭
+    try {
+      await page.click('a.sla_popup_detail_confirmCompAction_btn');
+      info('품질점검 신청 확인 클릭');
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e : new Error(String(e));
+      info(chalk.red(`확인 버튼 클릭 실패: ${err.message}`));
       return false;
     }
 
     await sleep(3000);
+    await this.saveHtmlSnapshot('complaint-submitted');
 
-    try {
-      const submitButton = page
-        .locator('button')
-        .filter({ hasText: /(신청|제출|확인)/ })
-        .first();
-
-      await submitButton.waitFor({ state: 'visible', timeout: 5000 });
-      await submitButton.click();
-      await sleep(3000);
-      return true;
-    } catch {
-      return true; // 이의신청 버튼 클릭까지는 성공으로 처리
-    }
+    return true;
   }
 
   async takeScreenshot(filePath = 'screenshot.png'): Promise<void> {
     if (this.page) {
       await this.page.screenshot({ path: filePath });
       console.log(`스크린샷 저장: ${filePath}`);
+    }
+  }
+
+  /** #ifArea의 HTML을 파일로 저장 — 디버그/증거용 */
+  private async saveHtmlSnapshot(label: string): Promise<void> {
+    try {
+      const snapshotDir = path.join(DATA_DIR, 'snapshots');
+      fs.mkdirSync(snapshotDir, { recursive: true });
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filePath = path.join(snapshotDir, `${timestamp}_${label}.html`);
+
+      const html = await this.page!.evaluate(() => {
+        return document.getElementById('ifArea')?.innerHTML || document.body.innerHTML;
+      });
+
+      fs.writeFileSync(filePath, html, 'utf8');
+    } catch {
+      // 스냅샷 저장 실패는 무시 — 측정 플로우에 영향 없음
     }
   }
 }
