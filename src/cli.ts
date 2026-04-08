@@ -70,6 +70,8 @@ export function buildCli(): Command {
       }
 
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 초기 설정\n'));
+      console.log(chalk.yellow('⚠️  KT SLA 측정은 유선(LAN) 연결에서만 유효합니다.'));
+      console.log(chalk.yellow('   Wi-Fi로 측정하면 감면 신청이 거부될 수 있습니다.\n'));
 
       const answers = await inquirer.prompt([
         {
@@ -282,6 +284,7 @@ export function buildCli(): Command {
       // ── 측정 실행 ──
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 실행'));
       console.log(`KT | ${opts.dryRun ? 'dry-run 모드' : '감면 신청 활성화'}`);
+      console.log(chalk.dim('유선(LAN) 연결 확인 필수 — Wi-Fi 측정은 SLA 인정 불가'));
       if (todayCount > 0) {
         console.log(chalk.dim(`오늘 ${todayCount + 1}번째 측정 (최대 ${maxAttempts}회)`));
       }
