@@ -9,7 +9,7 @@ import os from 'os';
 import axios from 'axios';
 import chalk from 'chalk';
 
-const CACHE_FILE = path.join(os.homedir(), '.damn-my-slow-kt', 'update-cache.json');
+const CACHE_FILE = path.join(os.homedir(), '.damn-my-slow-isp', 'update-cache.json');
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24시간
 const PACKAGE_NAME = 'damn-my-slow-kt';
 

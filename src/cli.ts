@@ -2,8 +2,9 @@
  * CLI 커맨드 정의 - commander 기반
  *
  * Usage:
- *   damn-my-slow-kt init              # config.yaml 생성 + 스케줄 설치 여부 질문
- *   damn-my-slow-kt run               # 1회 측정 + 감면 신청
+ *   damn-my-slow-kt init              # 초기 설정 (~/.damn-my-slow-isp/config-kt.yaml)
+ *   damn-my-slow-kt run               # 측정 + 감면 신청 (설정에 따라 다회 반복)
+ *   damn-my-slow-kt run --once        # 1회만 측정
  *   damn-my-slow-kt run --dry-run     # 측정만 (감면 신청 생략)
  *   damn-my-slow-kt history           # 이력 조회
  *   damn-my-slow-kt report            # 요약 리포트
@@ -31,6 +32,11 @@ import { sendNotifications } from './notify';
 import { printHistory, printStats } from './report';
 import { installSchedule, removeSchedule, getPlatform } from './scheduler';
 import { checkForUpdates } from './updater';
+import { checkAndRunMigrations } from './migration';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // package.json에서 버전 읽기
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -123,17 +129,25 @@ export function buildCli(): Command {
         telegramChatId = chatAnswer.chat_id;
       }
 
+      const defaults = getDefaultConfig();
       const cfg: Config = {
+        _config_version: defaults._config_version,
         credentials: { id: answers.id, password: answers.password },
         plan: { name: answers.plan_name, speed_mbps: answers.speed_mbps },
-        schedule: { time: '04:00', timezone: 'Asia/Seoul' },
+        schedule: {
+          time: '04:00',
+          timezone: 'Asia/Seoul',
+          max_attempts: defaults.schedule.max_attempts,
+          retry_interval_minutes: defaults.schedule.retry_interval_minutes,
+          stop_on_complaint_success: defaults.schedule.stop_on_complaint_success,
+        },
         notification: {
           discord_webhook: answers.discord_webhook,
           telegram_bot_token: answers.telegram_token,
           telegram_chat_id: telegramChatId,
         },
         headless: answers.headless,
-        db_path: getDefaultConfig().db_path,
+        db_path: defaults.db_path,
       };
 
       // 설정 파일 저장
@@ -142,9 +156,8 @@ export function buildCli(): Command {
       saveConfig(cfg, configPath);
 
       console.log(`\n${chalk.green(`✅ 설정 파일 생성 완료: ${configPath}`)}`);
-      console.log(
-        chalk.dim(`주의: ${configPath} 에는 비밀번호가 포함됩니다.`)
-      );
+      console.log(chalk.dim(`주의: ${configPath} 에는 비밀번호가 포함됩니다.`));
+      console.log(chalk.dim(`기본 설정: 하루 최대 ${cfg.schedule.max_attempts}회, ${cfg.schedule.retry_interval_minutes}분 간격 측정 (감면 성공 시 중단)`));
 
       // 자동 스케줄 설치 여부 물어보기
       const platform = getPlatform();
@@ -215,12 +228,13 @@ export function buildCli(): Command {
   // ─────────────────────────────────────
   program
     .command('run')
-    .description('1회 측정 + 감면 신청 실행')
+    .description('측정 + 감면 신청 실행 (설정에 따라 다회 반복)')
     .option('-c, --config <path>', '설정 파일 경로', DEFAULT_CONFIG_PATH)
     .option('--dry-run', '측정만 하고 감면 신청 생략', false)
+    .option('--once', '1회만 측정 (retry 무시)', false)
     .option('-v, --verbose', '상세 로그 출력', false)
     .option('--screenshot', '측정 완료 후 스크린샷 저장', false)
-    .action(async (opts: { config: string; dryRun: boolean; verbose: boolean; screenshot: boolean }) => {
+    .action(async (opts: { config: string; dryRun: boolean; once: boolean; verbose: boolean; screenshot: boolean }) => {
       // 업데이트 체크
       const noUpdateCheck = program.opts().noUpdateCheck as boolean | undefined;
       await checkForUpdates(pkg.version, { noUpdateCheck });
@@ -234,49 +248,100 @@ export function buildCli(): Command {
         process.exit(1);
       }
 
+      // 마이그레이션 체크 (업데이트 후 설정 변경 안내)
+      cfg = await checkAndRunMigrations(cfg, opts.config);
+
       if (!cfg.credentials.id || !cfg.credentials.password) {
         console.error(chalk.red('❌ KT 계정 정보가 설정되지 않았습니다.'));
         console.error(`${opts.config}에서 credentials.id와 credentials.password를 설정하세요.`);
         process.exit(1);
       }
 
+      const maxAttempts = opts.once ? 1 : (cfg.schedule.max_attempts || 1);
+      const intervalMin = cfg.schedule.retry_interval_minutes || 120;
+      const stopOnSuccess = cfg.schedule.stop_on_complaint_success !== false;
+
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 실행'));
-      console.log(`KT | ${opts.dryRun ? 'dry-run 모드' : '감면 신청 활성화'}\n`);
-
-      const provider = new KTProvider(cfg);
-      const db = new SpeedDatabase(cfg.db_path);
-      const measuredAt = new Date().toISOString();
-
-      console.log(`측정 시작: ${measuredAt.slice(0, 19)}`);
-      if (!cfg.headless) {
-        console.log(chalk.dim('브라우저 창이 열립니다 (headless=false)'));
+      console.log(`KT | ${opts.dryRun ? 'dry-run 모드' : '감면 신청 활성화'}`);
+      if (maxAttempts > 1) {
+        console.log(`최대 ${maxAttempts}회 측정 | ${intervalMin}분 간격 | 감면 성공 시 ${stopOnSuccess ? '중단' : '계속'}`);
       }
+      console.log('');
 
-      const result: SpeedTestResult = await provider.run(opts.dryRun);
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (maxAttempts > 1) {
+          console.log(chalk.bold(`\n── 측정 ${attempt}/${maxAttempts} ──`));
+        }
 
-      const record = {
-        isp: 'kt',
-        measured_at: measuredAt,
-        download_mbps: result.download_mbps,
-        upload_mbps: result.upload_mbps,
-        ping_ms: result.ping_ms,
-        sla_result: result.sla_result,
-        complaint_filed: result.complaint_filed,
-        complaint_result: result.complaint_result,
-        raw_data: JSON.stringify(result.raw_data),
-        error: result.error,
-      };
+        const provider = new KTProvider(cfg);
+        const db = new SpeedDatabase(cfg.db_path);
+        const measuredAt = new Date().toISOString();
 
-      db.save(record);
-      db.close();
+        console.log(`측정 시작: ${measuredAt.slice(0, 19)}`);
+        if (!cfg.headless) {
+          console.log(chalk.dim('브라우저 창이 열립니다 (headless=false)'));
+        }
 
-      printRunResult(record);
+        let result: SpeedTestResult;
+        try {
+          result = await provider.run(opts.dryRun);
+        } catch (e: unknown) {
+          const err = e instanceof Error ? e : new Error(String(e));
+          console.error(chalk.red(`⚠️  측정 중 오류: ${err.message}`));
+          db.close();
 
-      await sendNotifications(cfg, record);
+          // 오류 발생해도 다음 시도 계속
+          if (attempt < maxAttempts) {
+            console.log(chalk.dim(`${intervalMin}분 후 재시도합니다...`));
+            await sleep(intervalMin * 60 * 1000);
+            continue;
+          }
+          process.exit(1);
+        }
 
-      if (result.error) {
-        console.error(`\n${chalk.red(`⚠️  오류 발생: ${result.error}`)}`);
-        process.exit(1);
+        const record = {
+          isp: 'kt',
+          measured_at: measuredAt,
+          download_mbps: result.download_mbps,
+          upload_mbps: result.upload_mbps,
+          ping_ms: result.ping_ms,
+          sla_result: result.sla_result,
+          complaint_filed: result.complaint_filed,
+          complaint_result: result.complaint_result,
+          raw_data: JSON.stringify(result.raw_data),
+          error: result.error,
+        };
+
+        db.save(record);
+        db.close();
+
+        printRunResult(record);
+        await sendNotifications(cfg, record);
+
+        // 감면 신청 성공 시 중단
+        if (stopOnSuccess && result.complaint_result === 'success') {
+          console.log(chalk.green('\n🎉 감면 신청 성공! 오늘 측정을 종료합니다.'));
+          break;
+        }
+
+        // SLA 통과 (속도 정상) → 다음 시도에서 재측정
+        if (result.sla_result === 'pass' && attempt < maxAttempts) {
+          console.log(chalk.dim(`\n속도 정상 (SLA pass). ${intervalMin}분 후 재측정합니다... (${attempt}/${maxAttempts})`));
+          await sleep(intervalMin * 60 * 1000);
+          continue;
+        }
+
+        // SLA fail인데 감면 신청 실패/스킵 → 다음 시도
+        if (result.sla_result === 'fail' && result.complaint_result !== 'success' && attempt < maxAttempts) {
+          console.log(chalk.dim(`\n감면 미완료. ${intervalMin}분 후 재시도합니다... (${attempt}/${maxAttempts})`));
+          await sleep(intervalMin * 60 * 1000);
+          continue;
+        }
+
+        // 마지막 시도이거나 더 이상 retry 불필요
+        if (attempt === maxAttempts && maxAttempts > 1) {
+          console.log(chalk.dim(`\n오늘 ${attempt}회 측정 완료.`));
+        }
       }
     });
 
@@ -300,10 +365,13 @@ export function buildCli(): Command {
       }
 
       console.log(chalk.cyan('\n⚙️  현재 설정 (KT)\n'));
+      console.log(`설정 버전: v${cfg._config_version}`);
       console.log(`계정 ID: ${cfg.credentials.id}`);
       console.log(`비밀번호: ${'*'.repeat(cfg.credentials.password.length)}`);
       console.log(`요금제: ${cfg.plan.name} (${cfg.plan.speed_mbps} Mbps)`);
-      console.log(`측정 시간: ${cfg.schedule.time} (${cfg.schedule.timezone})`);
+      console.log(`첫 측정: ${cfg.schedule.time} (${cfg.schedule.timezone})`);
+      console.log(`최대 측정: ${cfg.schedule.max_attempts}회/일 | ${cfg.schedule.retry_interval_minutes}분 간격`);
+      console.log(`감면 성공 시: ${cfg.schedule.stop_on_complaint_success ? '중단' : '계속 측정'}`);
       console.log(`Discord 웹훅: ${cfg.notification.discord_webhook ? '설정됨' : '없음'}`);
       console.log(`Telegram: ${cfg.notification.telegram_bot_token ? '설정됨' : '없음'}`);
       console.log(`Headless 모드: ${cfg.headless}`);

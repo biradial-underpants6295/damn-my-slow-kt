@@ -24,6 +24,12 @@ export interface Plan {
 export interface Schedule {
   time: string;
   timezone: string;
+  /** 하루 최대 측정 횟수 (감면 성공 시 중단) */
+  max_attempts: number;
+  /** 재시도 간격 (분). 첫 측정 후 이 간격으로 반복 */
+  retry_interval_minutes: number;
+  /** 감면 신청 성공 시 나머지 시도 중단 */
+  stop_on_complaint_success: boolean;
 }
 
 export interface Notification {
@@ -33,6 +39,7 @@ export interface Notification {
 }
 
 export interface Config {
+  _config_version: number;
   credentials: Credentials;
   plan: Plan;
   schedule: Schedule;
@@ -45,9 +52,16 @@ export const DEFAULT_CONFIG_PATH = path.join(DATA_DIR, 'config-kt.yaml');
 
 export function getDefaultConfig(): Config {
   return {
+    _config_version: 3,
     credentials: { id: '', password: '' },
     plan: { name: '기가라이트', speed_mbps: 1000 },
-    schedule: { time: '04:00', timezone: 'Asia/Seoul' },
+    schedule: {
+      time: '04:00',
+      timezone: 'Asia/Seoul',
+      max_attempts: 10,
+      retry_interval_minutes: 120,
+      stop_on_complaint_success: true,
+    },
     notification: {
       discord_webhook: '',
       telegram_bot_token: '',
@@ -72,10 +86,11 @@ export function loadConfig(configPath?: string): Config {
 
   const creds = (raw.credentials || {}) as Record<string, string>;
   const plan = (raw.plan || {}) as Record<string, unknown>;
-  const sched = (raw.schedule || {}) as Record<string, string>;
+  const sched = (raw.schedule || {}) as Partial<Schedule>;
   const notif = (raw.notification || {}) as Record<string, string>;
 
   return {
+    _config_version: Number(raw._config_version) || 1,
     credentials: {
       id: creds.id || '',
       password: creds.password || '',
@@ -87,6 +102,12 @@ export function loadConfig(configPath?: string): Config {
     schedule: {
       time: sched.time || '04:00',
       timezone: sched.timezone || 'Asia/Seoul',
+      max_attempts: Number(sched.max_attempts) || 10,
+      retry_interval_minutes: Number(sched.retry_interval_minutes) || 120,
+      stop_on_complaint_success:
+        sched.stop_on_complaint_success !== undefined
+          ? Boolean(sched.stop_on_complaint_success)
+          : true,
     },
     notification: {
       discord_webhook: notif.discord_webhook || '',
@@ -102,6 +123,7 @@ export function saveConfig(config: Config, configPath?: string): void {
   const cfgPath = configPath || DEFAULT_CONFIG_PATH;
 
   const data = {
+    _config_version: config._config_version,
     credentials: {
       id: config.credentials.id,
       password: config.credentials.password,
@@ -113,6 +135,9 @@ export function saveConfig(config: Config, configPath?: string): void {
     schedule: {
       time: config.schedule.time,
       timezone: config.schedule.timezone,
+      max_attempts: config.schedule.max_attempts,
+      retry_interval_minutes: config.schedule.retry_interval_minutes,
+      stop_on_complaint_success: config.schedule.stop_on_complaint_success,
     },
     notification: {
       discord_webhook: config.notification.discord_webhook,
@@ -131,6 +156,8 @@ export function getExampleConfigContent(): string {
   return `# damn-my-slow-kt 설정 파일
 # 주의: 이 파일은 .gitignore에 포함되어 있습니다 (비밀번호 보호)
 
+_config_version: 3
+
 credentials:
   id: "KT_아이디@example.com"
   password: "비밀번호"
@@ -140,8 +167,11 @@ plan:
   speed_mbps: 1000  # 계약 속도 (Mbps) - 기가라이트: 1000, 기가프리미엄: 2000
 
 schedule:
-  time: "04:00"  # 매일 새벽 4시 측정
+  time: "04:00"       # 첫 측정 시작 시간
   timezone: "Asia/Seoul"
+  max_attempts: 10    # 하루 최대 측정 횟수 (감면 성공 시 중단)
+  retry_interval_minutes: 120  # 재시도 간격 (분) - 기본 2시간
+  stop_on_complaint_success: true  # 감면 성공 시 나머지 시도 중단
 
 notification:
   discord_webhook: ""  # Discord 웹훅 URL (선택)
