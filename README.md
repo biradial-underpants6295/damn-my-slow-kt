@@ -27,8 +27,25 @@ SLA 측정을 위해 KT 공식 속도측정 프로그램이 필요합니다.
 
 - **macOS**: [ktspeed.pkg 다운로드](https://speed.kt.com/file/ktspeed.pkg) 설치
 - **Windows**: [speed.kt.com](https://speed.kt.com) → 속도측정 → 품질보증(SLA) 테스트 진입 후 안내에 따라 설치
+- **Linux**: KT 속도측정 프로그램이 지원하지 않아 사용 불가
 
 > ⚠️ **Windows는 아직 테스트되지 않았습니다.** macOS에서만 동작이 검증되었습니다.
+
+<details>
+<summary>macOS에서 설치 시 보안 경고가 뜨는 경우</summary>
+
+ktspeed.pkg는 KT 공식 파일이지만, Apple 공증(Notarization)이 안 되어 있어 macOS에서 보안 경고가 뜰 수 있습니다.
+
+**"Apple은 이 파일이 악성 소프트웨어인지 확인할 수 없습니다"** 라는 메시지가 나타나면:
+
+1. **시스템 설정** → **개인정보 보호 및 보안** 으로 이동
+2. 하단 **보안** 섹션에서 `"ktspeed.pkg" 차단됨` 메시지 확인
+3. **"그래도 열기"** 버튼 클릭
+4. 비밀번호 또는 Touch ID로 인증
+
+> macOS Sequoia(15) 이후로는 Ctrl+클릭 우회가 제거되었습니다. 반드시 시스템 설정에서 허용해야 합니다.
+
+</details>
 
 ### 2. 초기 설정
 
