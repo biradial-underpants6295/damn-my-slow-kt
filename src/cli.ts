@@ -32,7 +32,7 @@ import { sendNotifications } from './notify';
 import { printHistory, printStats } from './report';
 import { installSchedule, removeSchedule, getPlatform } from './scheduler';
 import { checkForUpdates } from './updater';
-import { checkAndRunMigrations } from './migration';
+import { checkAndRunMigrations, CURRENT_CONFIG_VERSION } from './migration';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,9 +63,16 @@ export function buildCli(): Command {
       const configPath = opts.config;
 
       if (fs.existsSync(configPath) && !opts.force) {
-        console.log(chalk.yellow(`⚠️  ${configPath} 파일이 이미 존재합니다.`));
-        console.log('덮어쓰려면 --force 옵션을 사용하세요.');
-        process.exit(1);
+        // 기존 설정 파일이 있으면 마이그레이션 체크 후 종료
+        let cfg = loadConfig(configPath);
+        cfg = await checkAndRunMigrations(cfg, configPath, { interactive: true });
+
+        if (cfg._config_version >= CURRENT_CONFIG_VERSION) {
+          console.log(chalk.green(`✅ 설정이 최신 상태입니다. (v${cfg._config_version})`));
+          console.log(chalk.dim(`   ${configPath}`));
+          console.log(chalk.dim('\n   새로 설정하려면 --force 옵션을 사용하세요.'));
+        }
+        return;
       }
 
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 초기 설정\n'));
