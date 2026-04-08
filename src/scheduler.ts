@@ -334,9 +334,13 @@ function installSynologyCron(config: Config): void {
 
   const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
 
+  // cron은 최소 PATH로 실행되므로 node/npx가 있는 디렉토리를 PATH에 명시해야 한다
+  const nodeBinDir = path.dirname(process.execPath);
+  const pathPrefix = `PATH=${nodeBinDir}:/usr/local/bin:/usr/bin:/bin`;
+
   // Synology /etc/crontab은 user 필드가 포함된 형식
   const cronLines = times.map((t) =>
-    `${t.minute}\t${t.hour}\t*\t*\t*\t${user}\t${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
+    `${t.minute}\t${t.hour}\t*\t*\t*\t${user}\t${pathPrefix} ${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
   );
 
   let existing = '';
@@ -395,9 +399,13 @@ function installCron(config: Config): void {
 
   const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
 
+  // cron은 최소 PATH로 실행되므로 node/npx가 있는 디렉토리를 PATH에 명시
+  const nodeBinDir = path.dirname(process.execPath);
+  const pathPrefix = `PATH=${nodeBinDir}:/usr/local/bin:/usr/bin:/bin`;
+
   // 각 트리거 시간마다 cron 라인 생성
   const cronLines = times.map((t) =>
-    `${t.minute} ${t.hour} * * * ${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
+    `${t.minute} ${t.hour} * * * ${pathPrefix} ${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
   );
 
   let existing = '';
