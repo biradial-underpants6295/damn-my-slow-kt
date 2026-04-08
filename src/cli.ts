@@ -174,7 +174,7 @@ export function buildCli(): Command {
 
         if (installSched) {
           try {
-            installSchedule(cfg);
+            installSchedule(cfg, configPath);
           } catch (e: unknown) {
             const err = e instanceof Error ? e : new Error(String(e));
             console.log('');
@@ -185,12 +185,12 @@ export function buildCli(): Command {
             console.log(chalk.bold(`     npx --yes damn-my-slow-kt run --config ${configPath}`));
             console.log('');
             console.log('   스케줄을 다시 등록하려면:');
-            console.log(chalk.bold(`     sudo npx --yes damn-my-slow-kt schedule install --config ${configPath}`));
+            console.log(chalk.bold(`     npx --yes damn-my-slow-kt schedule install --config ${configPath}`));
           }
         }
       } else if (platform === 'windows') {
         console.log('\nWindows에서는 작업 스케줄러를 수동으로 설정하세요:');
-        console.log(`  npx damn-my-slow-kt schedule install`);
+        console.log(`  npx damn-my-slow-kt schedule install --config ${configPath}`);
       }
 
       console.log(chalk.dim('\n지금 테스트하려면 실행해보세요:'));
@@ -440,7 +440,7 @@ export function buildCli(): Command {
       }
 
       try {
-        installSchedule(cfg);
+        installSchedule(cfg, opts.config);
       } catch (e: unknown) {
         const err = e instanceof Error ? e : new Error(String(e));
         console.error(chalk.red(`❌ 스케줄 설치 실패: ${err.message}`));

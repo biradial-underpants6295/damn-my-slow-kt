@@ -8,6 +8,12 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { Config, DATA_DIR, DEFAULT_CONFIG_PATH } from './config';
 
+/** POSIX shell 안전 문자열 이스케이프. 공백·특수문자가 포함된 경로를 cron/systemd에 안전하게 넘긴다. */
+function shellQuote(s: string): string {
+  if (/^[a-zA-Z0-9_./:@=,-]+$/.test(s)) return s;
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 const LAUNCHD_PLIST_PATH = path.join(
   os.homedir(),
   'Library',
@@ -130,10 +136,9 @@ function formatScheduleTimes(times: ScheduleTime[]): string {
 // macOS - launchd plist
 // ─────────────────────────────────────────────
 
-function buildLaunchdPlist(config: Config): string {
+function buildLaunchdPlist(config: Config, configPath: string): string {
   const times = buildScheduleTimes(config);
   const exec = getCliExec();
-  const configPath = DEFAULT_CONFIG_PATH;
   const logDir = DATA_DIR;
   const logPath = path.join(logDir, 'run.log');
   const errPath = path.join(logDir, 'run.error.log');
@@ -182,7 +187,7 @@ ${calendarEntries}
 `;
 }
 
-export function installMacos(config: Config): void {
+export function installMacos(config: Config, configPath: string): void {
   const plistDir = path.dirname(LAUNCHD_PLIST_PATH);
   fs.mkdirSync(plistDir, { recursive: true });
 
@@ -193,7 +198,7 @@ export function installMacos(config: Config): void {
     // ignore
   }
 
-  const plist = buildLaunchdPlist(config);
+  const plist = buildLaunchdPlist(config, configPath);
   fs.writeFileSync(LAUNCHD_PLIST_PATH, plist, 'utf8');
 
   execSync(`launchctl load "${LAUNCHD_PLIST_PATH}"`);
@@ -252,31 +257,30 @@ function isSynology(): boolean {
   return fs.existsSync('/etc/synoinfo.conf');
 }
 
-export function installLinux(config: Config): void {
+export function installLinux(config: Config, configPath: string): void {
   if (hasSystemd()) {
-    installSystemd(config);
+    installSystemd(config, configPath);
   } else if (isSynology()) {
-    installSynologyCron(config);
+    installSynologyCron(config, configPath);
   } else if (hasCrontab()) {
-    installCron(config);
+    installCron(config, configPath);
   } else {
     throw new Error(
       'crontab 명령어를 찾을 수 없습니다.\n' +
       '수동으로 cron을 설정하세요:\n' +
-      `  npx --yes damn-my-slow-kt run --config ${DEFAULT_CONFIG_PATH}`
+      `  npx --yes damn-my-slow-kt run --config ${configPath}`
     );
   }
 }
 
-function installSystemd(config: Config): void {
+function installSystemd(config: Config, configPath: string): void {
   const times = buildScheduleTimes(config);
   const exec = getCliExec();
-  const configPath = DEFAULT_CONFIG_PATH;
 
   const serviceDir = path.dirname(SYSTEMD_SERVICE_PATH);
   fs.mkdirSync(serviceDir, { recursive: true });
 
-  const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
+  const execCmd = [shellQuote(exec.program), ...exec.prefixArgs.map(shellQuote), 'run', '--config', shellQuote(configPath)].join(' ');
 
   const serviceContent = `[Unit]
 Description=damn-my-slow-kt KT SLA Speed Test
@@ -324,23 +328,22 @@ WantedBy=timers.target
  * synoservicectl --restart crond로 crond를 재시작한다.
  * /etc/crontab 형식: minute hour mday month wday user command
  */
-function installSynologyCron(config: Config): void {
+function installSynologyCron(config: Config, configPath: string): void {
   const SYSTEM_CRONTAB = '/etc/crontab';
   const times = buildScheduleTimes(config);
   const exec = getCliExec();
-  const configPath = DEFAULT_CONFIG_PATH;
   const logPath = path.join(DATA_DIR, 'cron.log');
   const user = os.userInfo().username;
 
-  const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
+  const execCmd = [shellQuote(exec.program), ...exec.prefixArgs.map(shellQuote), 'run', '--config', shellQuote(configPath)].join(' ');
 
   // cron은 최소 PATH로 실행되므로 node/npx가 있는 디렉토리를 PATH에 명시해야 한다
   const nodeBinDir = path.dirname(process.execPath);
-  const pathPrefix = `PATH=${nodeBinDir}:/usr/local/bin:/usr/bin:/bin`;
+  const pathPrefix = `PATH=${shellQuote(nodeBinDir)}:/usr/local/bin:/usr/bin:/bin`;
 
   // Synology /etc/crontab은 user 필드가 포함된 형식
   const cronLines = times.map((t) =>
-    `${t.minute}\t${t.hour}\t*\t*\t*\t${user}\t${pathPrefix} ${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
+    `${t.minute}\t${t.hour}\t*\t*\t*\t${user}\t${pathPrefix} ${execCmd} >> ${shellQuote(logPath)} 2>&1 ${CRON_COMMENT}`
   );
 
   let existing = '';
@@ -391,21 +394,20 @@ function installSynologyCron(config: Config): void {
   console.log(`\n   제거하려면: sudo npx --yes damn-my-slow-kt schedule remove`);
 }
 
-function installCron(config: Config): void {
+function installCron(config: Config, configPath: string): void {
   const times = buildScheduleTimes(config);
   const exec = getCliExec();
-  const configPath = DEFAULT_CONFIG_PATH;
   const logPath = path.join(DATA_DIR, 'cron.log');
 
-  const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
+  const execCmd = [shellQuote(exec.program), ...exec.prefixArgs.map(shellQuote), 'run', '--config', shellQuote(configPath)].join(' ');
 
   // cron은 최소 PATH로 실행되므로 node/npx가 있는 디렉토리를 PATH에 명시
   const nodeBinDir = path.dirname(process.execPath);
-  const pathPrefix = `PATH=${nodeBinDir}:/usr/local/bin:/usr/bin:/bin`;
+  const pathPrefix = `PATH=${shellQuote(nodeBinDir)}:/usr/local/bin:/usr/bin:/bin`;
 
   // 각 트리거 시간마다 cron 라인 생성
   const cronLines = times.map((t) =>
-    `${t.minute} ${t.hour} * * * ${pathPrefix} ${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
+    `${t.minute} ${t.hour} * * * ${pathPrefix} ${execCmd} >> ${shellQuote(logPath)} 2>&1 ${CRON_COMMENT}`
   );
 
   let existing = '';
@@ -494,8 +496,8 @@ export function removeLinux(): void {
         } catch { /* ignore */ }
       }
       console.log('✅ Synology /etc/crontab 스케줄 제거 완료');
-    } catch {
-      console.log('⚠️  /etc/crontab 수정 실패. sudo 권한으로 다시 시도하세요.');
+    } catch (_e: unknown) {
+      throw new Error('/etc/crontab 수정 실패. sudo 권한으로 다시 시도하세요:\n  sudo npx --yes damn-my-slow-kt schedule remove');
     }
     return;
   }
@@ -503,29 +505,37 @@ export function removeLinux(): void {
   // 일반 Linux: crontab 명령어로 제거
   try {
     const existing = execSync('crontab -l 2>/dev/null', { encoding: 'utf8' });
+    if (!existing.includes(CRON_COMMENT)) {
+      console.log('등록된 crontab 스케줄이 없습니다.');
+      return;
+    }
     const lines = existing.split('\n').filter((l) => !l.includes(CRON_COMMENT));
     const newCrontab = lines.join('\n') + '\n';
-    require('child_process').spawnSync('crontab', ['-'], { input: newCrontab, encoding: 'utf8' });
+    const proc = require('child_process').spawnSync('crontab', ['-'], { input: newCrontab, encoding: 'utf8' });
+    if (proc.status !== 0 || proc.error) {
+      throw new Error(`crontab 제거 실패: ${(proc.stderr as string | undefined) || proc.error?.message || 'unknown error'}`);
+    }
     console.log('✅ crontab 스케줄 제거 완료');
-  } catch {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes('crontab 제거 실패')) throw e;
     console.log('등록된 crontab 스케줄이 없습니다.');
   }
 }
 
-export function installSchedule(config: Config): void {
+export function installSchedule(config: Config, configPath: string = DEFAULT_CONFIG_PATH): void {
   const platform = getPlatform();
 
   if (platform === 'macos') {
-    installMacos(config);
+    installMacos(config, configPath);
   } else if (platform === 'linux') {
-    installLinux(config);
+    installLinux(config, configPath);
   } else if (platform === 'windows') {
     console.log('');
     const times = buildScheduleTimes(config);
     console.log('Windows에서는 작업 스케줄러(Task Scheduler)를 사용하세요:');
     console.log('1. Win + R → taskschd.msc 입력');
     console.log('2. 기본 작업 만들기 클릭');
-    console.log(`3. 프로그램: npx --yes damn-my-slow-kt run --config ${DEFAULT_CONFIG_PATH}`);
+    console.log(`3. 프로그램: npx --yes damn-my-slow-kt run --config ${configPath}`);
     console.log(`4. 트리거: 매일 ${formatScheduleTimes(times)} (${times.length}개 등록)`);
     console.log('   (run 내부에서 오늘 완료 여부를 체크하므로 모두 등록해도 안전합니다)');
   } else {

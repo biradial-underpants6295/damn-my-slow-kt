@@ -154,11 +154,11 @@ export async function checkAndRunMigrations(
       if (reinstall) {
         try {
           removeSchedule();
-          installSchedule(updatedConfig);
+          installSchedule(updatedConfig, configPath);
         } catch (e: unknown) {
           const err = e instanceof Error ? e : new Error(String(e));
           console.error(chalk.red(`스케줄 재등록 실패: ${err.message}`));
-          console.error(chalk.dim('수동으로 재등록하세요: npx damn-my-slow-kt schedule install'));
+          console.error(chalk.dim(`수동으로 재등록하세요: npx damn-my-slow-kt schedule install --config ${configPath}`));
         }
       }
     }
