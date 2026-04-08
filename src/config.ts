@@ -79,7 +79,7 @@ export function loadConfig(configPath?: string): Config {
 
   if (!fs.existsSync(cfgPath)) {
     throw new Error(
-      `설정 파일이 없습니다: ${cfgPath}\n'npx damn-my-slow-kt init' 명령으로 설정 파일을 생성하세요.`
+      `설정 파일이 없습니다: ${cfgPath}\n'npx -y damn-my-slow-kt@latest init' 명령으로 설정 파일을 생성하세요.`
     );
   }
 

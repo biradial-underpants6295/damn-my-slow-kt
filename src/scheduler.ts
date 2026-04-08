@@ -207,7 +207,7 @@ export function installMacos(config: Config, configPath: string): void {
   console.log(`✅ macOS launchd 스케줄 등록 완료: ${LAUNCHD_PLIST_PATH}`);
   console.log(`   매일 ${times.length}회 실행: ${formatScheduleTimes(times)}`);
   console.log(`   감면 성공 시 나머지 실행은 자동 스킵됩니다.`);
-  console.log(`\n   제거하려면: npx damn-my-slow-kt schedule remove`);
+  console.log(`\n   제거하려면: npx -y damn-my-slow-kt@latest schedule remove`);
 }
 
 export function removeMacos(): void {
@@ -319,7 +319,7 @@ WantedBy=timers.target
   console.log(`   매일 ${times.length}회 실행: ${formatScheduleTimes(times)}`);
   console.log(`   감면 성공 시 나머지 실행은 자동 스킵됩니다.`);
   console.log(`   확인: systemctl --user status damn-my-slow-kt.timer`);
-  console.log(`\n   제거하려면: npx damn-my-slow-kt schedule remove`);
+  console.log(`\n   제거하려면: npx -y damn-my-slow-kt@latest schedule remove`);
 }
 
 /**
@@ -456,7 +456,7 @@ function installCron(config: Config, configPath: string): void {
   console.log(`✅ crontab 등록 완료`);
   console.log(`   매일 ${times.length}회 실행: ${formatScheduleTimes(times)}`);
   console.log(`   감면 성공 시 나머지 실행은 자동 스킵됩니다.`);
-  console.log(`\n   제거하려면: npx damn-my-slow-kt schedule remove`);
+  console.log(`\n   제거하려면: npx -y damn-my-slow-kt@latest schedule remove`);
 }
 
 export function removeLinux(): void {

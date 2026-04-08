@@ -103,7 +103,7 @@ export async function checkAndRunMigrations(
     : process.stdout.isTTY === true;
 
   if (!isInteractive) {
-    console.log(chalk.yellow('  → 대화형 환경에서 "npx damn-my-slow-kt run" 을 실행하여 마이그레이션을 적용하세요.'));
+    console.log(chalk.yellow('  → 대화형 환경에서 "npx -y damn-my-slow-kt@latest run" 을 실행하여 마이그레이션을 적용하세요.'));
     console.log('');
     return config;
   }
@@ -158,7 +158,7 @@ export async function checkAndRunMigrations(
         } catch (e: unknown) {
           const err = e instanceof Error ? e : new Error(String(e));
           console.error(chalk.red(`스케줄 재등록 실패: ${err.message}`));
-          console.error(chalk.dim(`수동으로 재등록하세요: npx damn-my-slow-kt schedule install --config ${configPath}`));
+          console.error(chalk.dim(`수동으로 재등록하세요: npx -y damn-my-slow-kt@latest schedule install --config ${configPath}`));
         }
       }
     }

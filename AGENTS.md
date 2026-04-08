@@ -3,7 +3,7 @@
 > AI Agent rules and codebase documentation. Update this file when completing tasks.
 
 ## Project Overview
-- **Name**: damn-my-slow-kt v0.4.x
+- **Name**: damn-my-slow-kt v0.5.x
 - **Purpose**: KT internet SLA speed measurement automation + fee reduction CLI tool
 - **What it does**: Automates the entire flow of logging into speed.kt.com, running SLA speed tests (5 rounds, ~25min), and filing fee reduction complaints when speed is below 50% of contract
 - **Stack**: TypeScript (ES2020, CommonJS), Node.js 20+, Playwright, SQLite (node:sqlite), Commander CLI
@@ -49,9 +49,10 @@ tests/
 > Run `tree -I node_modules -I dist` to see the full directory structure.
 
 ### Key Files Explained
-- **kt.ts** (554 lines): The core business logic. Drives Playwright through KT's SLA test flow. Do NOT modify the browser automation selectors without verifying against the live site
-- **cli.ts** (522 lines): All Commander commands. The `run` action checks today's DB records to decide whether to skip (already measured/complained)
-- **scheduler.ts** (402 lines): Generates multiple launchd/systemd/cron triggers per day based on `max_attempts` and `retry_interval_minutes`
+- **kt.ts** (~830 lines): The core business logic. Drives Playwright through KT's SLA test flow. Do NOT modify the browser automation selectors without verifying against the live site
+- **cli.ts** (~780 lines): All Commander commands. `run` validates required config fields (credentials + phone) via `validateRequiredFields()` before execution. `init --force` pre-fills prompts with existing config values
+- **config.ts** (~200 lines): YAML config load/save, interfaces, defaults, `validateRequiredFields()` for required field validation
+- **scheduler.ts** (~560 lines): Generates multiple launchd/systemd/cron triggers per day based on `max_attempts` and `retry_interval_minutes`
 - **db.ts**: Dual storage backend — tries `node:sqlite` first, falls back to JSON file. Both implement the same interface methods
 
 ## Coding Conventions

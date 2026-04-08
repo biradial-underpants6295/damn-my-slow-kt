@@ -67,15 +67,31 @@ export function buildCli(): Command {
         });
 
         if (cfg._config_version >= CURRENT_CONFIG_VERSION) {
-          console.log(
-            chalk.green(`✅ 설정이 최신 상태입니다. (v${cfg._config_version})`),
-          );
-          console.log(chalk.dim(`   ${configPath}`));
-          console.log(
-            chalk.dim("\n   새로 설정하려면 --force 옵션을 사용하세요."),
-          );
+          const missingFields = validateRequiredFields(cfg);
+          if (missingFields.length > 0) {
+            console.log(chalk.yellow(`⚠️  설정 파일은 있지만 필수 항목이 누락되었습니다:`));
+            for (const field of missingFields) {
+              console.log(chalk.yellow(`   • ${field}`));
+            }
+            console.log(
+              `\n'npx -y damn-my-slow-kt@latest init --force' 명령으로 설정을 다시 진행하세요.`,
+            );
+          } else {
+            console.log(
+              chalk.green(`✅ 설정이 최신 상태입니다. (v${cfg._config_version})`),
+            );
+            console.log(chalk.dim(`   ${configPath}`));
+            console.log(
+              chalk.dim("\n   새로 설정하려면 --force 옵션을 사용하세요."),
+            );
+          }
         }
         return;
+      }
+
+      let existing: Config | null = null;
+      if (fs.existsSync(configPath)) {
+        try { existing = loadConfig(configPath); } catch { existing = null; }
       }
 
       console.log(chalk.cyan("\n🐌 damn-my-slow-kt 초기 설정\n"));
@@ -85,6 +101,9 @@ export function buildCli(): Command {
       console.log(
         chalk.yellow("   Wi-Fi로 측정하면 감면 신청이 거부될 수 있습니다."),
       );
+      if (existing) {
+        console.log(chalk.dim("\n   기존 설정값이 표시됩니다. 엔터를 누르면 기존 값을 유지합니다."));
+      }
       console.log("");
       printSpeedAgentInstallGuide();
       console.log(chalk.dim(`\n📋 KT 품질보장제도(SLA) 공식 안내:`));
@@ -99,22 +118,28 @@ export function buildCli(): Command {
           type: "input",
           name: "id",
           message: "KT 아이디 (이메일 또는 ID):",
+          default: existing?.credentials.id || undefined,
           validate: (v: string) => v.trim() !== "" || "아이디를 입력하세요.",
         },
         {
           type: "password",
           name: "password",
-          message: "KT 비밀번호:",
+          message: existing?.credentials.password
+            ? "KT 비밀번호 (엔터 시 기존 비밀번호 사용):"
+            : "KT 비밀번호:",
           mask: "*",
-          validate: (v: string) => v.trim() !== "" || "비밀번호를 입력하세요.",
+          validate: (v: string) => {
+            if (!v.trim() && existing?.credentials.password) return true;
+            return v.trim() !== "" || "비밀번호를 입력하세요.";
+          },
         },
         {
           type: "input",
           name: "phone",
           message: "연락처 (휴대폰 번호 — 이의신청 시 필요):",
-          default: "",
+          default: existing?.phone || undefined,
           validate: (v: string) => {
-            if (!v.trim()) return true; // 선택사항
+            if (!v.trim()) return "연락처를 입력하세요. 이의신청 시 필수입니다.";
             return /^01[0-9]{8,9}$/.test(v.replace(/-/g, "")) || "올바른 휴대폰 번호를 입력하세요. (예: 01012345678)";
           },
         },
@@ -122,30 +147,30 @@ export function buildCli(): Command {
           type: "input",
           name: "discord_webhook",
           message: "Discord 웹훅 URL (없으면 엔터):",
-          default: "",
+          default: existing?.notification.discord_webhook || "",
         },
         {
           type: "input",
           name: "telegram_token",
           message: "Telegram 봇 토큰 (없으면 엔터):",
-          default: "",
+          default: existing?.notification.telegram_bot_token || "",
         },
         {
           type: "confirm",
           name: "headless",
           message: "브라우저를 숨김 모드로 실행할까요?",
-          default: true,
+          default: existing?.headless ?? true,
         },
       ]);
 
-      let telegramChatId = "";
+      let telegramChatId = existing?.notification.telegram_chat_id || "";
       if (answers.telegram_token) {
         const chatAnswer = await inquirer.prompt([
           {
             type: "input",
             name: "chat_id",
             message: "Telegram 채팅 ID:",
-            default: "",
+            default: telegramChatId || "",
           },
         ]);
         telegramChatId = chatAnswer.chat_id;
@@ -154,10 +179,13 @@ export function buildCli(): Command {
       const defaults = getDefaultConfig();
       const cfg: Config = {
         _config_version: defaults._config_version,
-        credentials: { id: answers.id, password: answers.password },
+        credentials: {
+          id: answers.id,
+          password: answers.password || existing?.credentials.password || "",
+        },
         phone: answers.phone ? answers.phone.replace(/-/g, "") : "",
-        plan: { speed_mbps: defaults.plan.speed_mbps },
-        schedule: {
+        plan: { speed_mbps: existing?.plan.speed_mbps || defaults.plan.speed_mbps },
+        schedule: existing?.schedule || {
           time: "04:00",
           timezone: "Asia/Seoul",
           max_attempts: defaults.schedule.max_attempts,
@@ -171,7 +199,7 @@ export function buildCli(): Command {
           telegram_chat_id: telegramChatId,
         },
         headless: answers.headless,
-        db_path: defaults.db_path,
+        db_path: existing?.db_path || defaults.db_path,
       };
 
       // 설정 파일 저장
@@ -230,12 +258,12 @@ export function buildCli(): Command {
       } else if (platform === "windows") {
         console.log("\nWindows에서는 작업 스케줄러를 수동으로 설정하세요:");
         console.log(
-          `  npx damn-my-slow-kt schedule install --config ${configPath}`,
+          `  npx -y damn-my-slow-kt@latest schedule install --config ${configPath}`,
         );
       }
 
       console.log(chalk.dim("\n지금 테스트하려면 실행해보세요:"));
-      console.log(chalk.bold("  npx damn-my-slow-kt run"));
+      console.log(chalk.bold("  npx -y damn-my-slow-kt@latest run"));
 
       await askForStar();
     });
@@ -285,7 +313,7 @@ export function buildCli(): Command {
             console.error(chalk.red(`   • ${field}`));
           }
           console.error(
-            `\n'npx damn-my-slow-kt init' 명령으로 설정을 다시 진행하세요.`,
+            `\n'npx -y damn-my-slow-kt@latest init' 명령으로 설정을 다시 진행하세요.`,
           );
           process.exit(1);
         }
@@ -330,7 +358,7 @@ export function buildCli(): Command {
                 `[skip] 오늘 감면 성공 완료 (${todayCount}회 측정). 스킵합니다.`,
               );
               console.log(
-                `       강제 실행하려면: npx damn-my-slow-kt run --force`,
+                `       강제 실행하려면: npx -y damn-my-slow-kt@latest run --force`,
               );
               db.close();
               return;
@@ -362,7 +390,7 @@ export function buildCli(): Command {
                 `[skip] 오늘 ${todayCount}/${maxAttempts}회 완료. 스킵합니다.`,
               );
               console.log(
-                `       강제 실행하려면: npx damn-my-slow-kt run --force`,
+                `       강제 실행하려면: npx -y damn-my-slow-kt@latest run --force`,
               );
               db.close();
               return;
@@ -399,7 +427,9 @@ export function buildCli(): Command {
           hour12: false,
         });
         console.log(`측정 시작: ${localTime}`);
-        if (!cfg.headless) {
+        if (cfg.headless) {
+          console.log(chalk.dim("headless 모드로 실행합니다"));
+        } else {
           console.log(chalk.dim("브라우저 창이 열립니다 (headless=false)"));
         }
 
