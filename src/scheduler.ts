@@ -234,11 +234,37 @@ function hasSystemd(): boolean {
   }
 }
 
+/** crontab 바이너리가 PATH에 존재하는지 확인 */
+function hasCrontab(): boolean {
+  try {
+    execSync('which crontab 2>/dev/null', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Synology NAS 감지 — /etc/synoinfo.conf 존재 여부로 판별.
+ * Synology DSM은 user-level crontab이 없고 /etc/crontab을 직접 편집해야 한다.
+ */
+function isSynology(): boolean {
+  return fs.existsSync('/etc/synoinfo.conf');
+}
+
 export function installLinux(config: Config): void {
   if (hasSystemd()) {
     installSystemd(config);
-  } else {
+  } else if (isSynology()) {
+    installSynologyCron(config);
+  } else if (hasCrontab()) {
     installCron(config);
+  } else {
+    throw new Error(
+      'crontab 명령어를 찾을 수 없습니다.\n' +
+      '수동으로 cron을 설정하세요:\n' +
+      `  npx --yes damn-my-slow-kt run --config ${DEFAULT_CONFIG_PATH}`
+    );
   }
 }
 
@@ -290,6 +316,74 @@ WantedBy=timers.target
   console.log(`   감면 성공 시 나머지 실행은 자동 스킵됩니다.`);
   console.log(`   확인: systemctl --user status damn-my-slow-kt.timer`);
   console.log(`\n   제거하려면: npx damn-my-slow-kt schedule remove`);
+}
+
+/**
+ * Synology NAS 전용 cron 설치.
+ * DSM은 user-level crontab이 없으므로 /etc/crontab을 직접 편집하고
+ * synoservicectl --restart crond로 crond를 재시작한다.
+ * /etc/crontab 형식: minute hour mday month wday user command
+ */
+function installSynologyCron(config: Config): void {
+  const SYSTEM_CRONTAB = '/etc/crontab';
+  const times = buildScheduleTimes(config);
+  const exec = getCliExec();
+  const configPath = DEFAULT_CONFIG_PATH;
+  const logPath = path.join(DATA_DIR, 'cron.log');
+  const user = os.userInfo().username;
+
+  const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
+
+  // Synology /etc/crontab은 user 필드가 포함된 형식
+  const cronLines = times.map((t) =>
+    `${t.minute}\t${t.hour}\t*\t*\t*\t${user}\t${execCmd} >> ${logPath} 2>&1 ${CRON_COMMENT}`
+  );
+
+  let existing = '';
+  try {
+    existing = fs.readFileSync(SYSTEM_CRONTAB, 'utf8');
+  } catch {
+    throw new Error(`${SYSTEM_CRONTAB}을 읽을 수 없습니다. sudo 권한이 필요할 수 있습니다.`);
+  }
+
+  // 기존 damn-my-slow-kt 라인 제거 후 새 라인 추가
+  const lines = existing
+    .split('\n')
+    .filter((l) => !l.includes(CRON_COMMENT));
+
+  // 마지막 빈 줄 유지하면서 추가
+  while (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  lines.push(...cronLines, '');
+
+  const newCrontab = lines.join('\n');
+
+  try {
+    fs.writeFileSync(SYSTEM_CRONTAB, newCrontab, 'utf8');
+  } catch {
+    throw new Error(
+      `/etc/crontab 쓰기 실패. sudo 권한으로 다시 시도하세요:\n` +
+      `  sudo npx --yes damn-my-slow-kt schedule install`
+    );
+  }
+
+  // crond 재시작으로 변경사항 반영
+  try {
+    execSync('synoservicectl --restart crond 2>/dev/null', { stdio: 'ignore' });
+  } catch {
+    // synoservicectl이 없으면 /usr/syno/bin/ 경로로 재시도
+    try {
+      execSync('/usr/syno/bin/synoservicectl --restart crond 2>/dev/null', { stdio: 'ignore' });
+    } catch {
+      console.log('⚠️  crond 재시작 실패 — NAS를 재부팅하면 반영됩니다.');
+    }
+  }
+
+  console.log(`✅ Synology /etc/crontab 등록 완료`);
+  console.log(`   매일 ${times.length}회 실행: ${formatScheduleTimes(times)}`);
+  console.log(`   감면 성공 시 나머지 실행은 자동 스킵됩니다.`);
+  console.log(`\n   제거하려면: sudo npx --yes damn-my-slow-kt schedule remove`);
 }
 
 function installCron(config: Config): void {
@@ -376,7 +470,28 @@ export function removeLinux(): void {
     return;
   }
 
-  // cron 제거
+  // Synology NAS: /etc/crontab에서 제거
+  if (isSynology()) {
+    try {
+      const SYSTEM_CRONTAB = '/etc/crontab';
+      const existing = fs.readFileSync(SYSTEM_CRONTAB, 'utf8');
+      const lines = existing.split('\n').filter((l) => !l.includes(CRON_COMMENT));
+      fs.writeFileSync(SYSTEM_CRONTAB, lines.join('\n') + '\n', 'utf8');
+      try {
+        execSync('synoservicectl --restart crond 2>/dev/null', { stdio: 'ignore' });
+      } catch {
+        try {
+          execSync('/usr/syno/bin/synoservicectl --restart crond 2>/dev/null', { stdio: 'ignore' });
+        } catch { /* ignore */ }
+      }
+      console.log('✅ Synology /etc/crontab 스케줄 제거 완료');
+    } catch {
+      console.log('⚠️  /etc/crontab 수정 실패. sudo 권한으로 다시 시도하세요.');
+    }
+    return;
+  }
+
+  // 일반 Linux: crontab 명령어로 제거
   try {
     const existing = execSync('crontab -l 2>/dev/null', { encoding: 'utf8' });
     const lines = existing.split('\n').filter((l) => !l.includes(CRON_COMMENT));

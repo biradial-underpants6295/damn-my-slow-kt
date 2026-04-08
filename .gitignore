@@ -46,3 +46,5 @@ speed-test-result.png
 !.sisyphus/.gitignore
 !.sisyphus/plans/
 !.sisyphus/evidence/
+
+.claude/
