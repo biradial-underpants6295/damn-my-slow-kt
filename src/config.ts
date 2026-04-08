@@ -1,11 +1,15 @@
 /**
- * 설정 파일 로드/저장 (config.yaml) - KT 전용
+ * 설정 파일 로드/저장 - KT 전용
+ * 기본 경로: ~/.damn-my-slow-isp/config-kt.yaml
  */
 
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import os from 'os';
+
+/** 모든 ISP 공용 데이터 디렉토리 (~/.damn-my-slow-isp/) */
+export const DATA_DIR = path.join(os.homedir(), '.damn-my-slow-isp');
 
 export interface Credentials {
   id: string;
@@ -37,7 +41,7 @@ export interface Config {
   db_path: string;
 }
 
-export const DEFAULT_CONFIG_PATH = 'config.yaml';
+export const DEFAULT_CONFIG_PATH = path.join(DATA_DIR, 'config-kt.yaml');
 
 export function getDefaultConfig(): Config {
   return {
@@ -50,7 +54,7 @@ export function getDefaultConfig(): Config {
       telegram_chat_id: '',
     },
     headless: true,
-    db_path: path.join(os.homedir(), '.damn-my-slow-kt', 'history.db'),
+    db_path: path.join(DATA_DIR, 'history-kt.db'),
   };
 }
 
@@ -59,7 +63,7 @@ export function loadConfig(configPath?: string): Config {
 
   if (!fs.existsSync(cfgPath)) {
     throw new Error(
-      `설정 파일이 없습니다: ${cfgPath}\n'damn-my-slow-kt init' 명령으로 설정 파일을 생성하세요.`
+      `설정 파일이 없습니다: ${cfgPath}\n'npx damn-my-slow-kt init' 명령으로 설정 파일을 생성하세요.`
     );
   }
 
@@ -145,6 +149,6 @@ notification:
   telegram_chat_id: ""  # Telegram 채팅 ID (선택)
 
 headless: true  # false로 설정하면 브라우저 창 표시 (디버그용)
-db_path: "~/.damn-my-slow-kt/history.db"  # 측정 이력 저장 경로
+db_path: "~/.damn-my-slow-isp/history-kt.db"  # 측정 이력 저장 경로
 `;
 }

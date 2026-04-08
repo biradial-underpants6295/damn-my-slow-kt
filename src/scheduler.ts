@@ -6,7 +6,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { Config } from './config';
+import { Config, DATA_DIR, DEFAULT_CONFIG_PATH } from './config';
 
 const LAUNCHD_PLIST_PATH = path.join(
   os.homedir(),
@@ -99,8 +99,8 @@ export function getRunCommand(): string {
 function buildLaunchdPlist(config: Config): string {
   const [hour, minute] = config.schedule.time.split(':');
   const exec = getCliExec();
-  const configPath = path.resolve('config.yaml');
-  const logDir = path.join(os.homedir(), '.damn-my-slow-kt');
+  const configPath = DEFAULT_CONFIG_PATH;
+  const logDir = DATA_DIR;
   const logPath = path.join(logDir, 'run.log');
   const errPath = path.join(logDir, 'run.error.log');
 
@@ -203,7 +203,7 @@ export function installLinux(config: Config): void {
 function installSystemd(config: Config): void {
   const [hour, minute] = config.schedule.time.split(':');
   const exec = getCliExec();
-  const configPath = path.resolve('config.yaml');
+  const configPath = DEFAULT_CONFIG_PATH;
 
   const serviceDir = path.dirname(SYSTEMD_SERVICE_PATH);
   fs.mkdirSync(serviceDir, { recursive: true });
@@ -247,8 +247,8 @@ WantedBy=timers.target
 function installCron(config: Config): void {
   const [hour, minute] = config.schedule.time.split(':');
   const exec = getCliExec();
-  const configPath = path.resolve('config.yaml');
-  const logPath = path.join(os.homedir(), '.damn-my-slow-kt', 'cron.log');
+  const configPath = DEFAULT_CONFIG_PATH;
+  const logPath = path.join(DATA_DIR, 'cron.log');
 
   const execCmd = [exec.program, ...exec.prefixArgs, 'run', '--config', configPath].join(' ');
   const cronLine =
@@ -328,7 +328,7 @@ export function installSchedule(config: Config): void {
     console.log('Windows에서는 작업 스케줄러(Task Scheduler)를 사용하세요:');
     console.log('1. Win + R → taskschd.msc 입력');
     console.log('2. 기본 작업 만들기 클릭');
-    console.log(`3. 프로그램: npx --yes damn-my-slow-kt run --config ${path.resolve('config.yaml')}`);
+    console.log(`3. 프로그램: npx --yes damn-my-slow-kt run --config ${DEFAULT_CONFIG_PATH}`);
     console.log(`4. 트리거: 매일 ${config.schedule.time}`);
   } else {
     throw new Error(`지원하지 않는 플랫폼: ${platform}`);

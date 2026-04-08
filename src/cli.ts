@@ -50,7 +50,7 @@ export function buildCli(): Command {
   // ─────────────────────────────────────
   program
     .command('init')
-    .description('초기 설정: config.yaml 생성 + 자동 스케줄 설치 여부 질문')
+    .description('초기 설정: 설정 파일 생성 + 자동 스케줄 설치 여부 질문')
     .option('-c, --config <path>', '설정 파일 경로', DEFAULT_CONFIG_PATH)
     .option('-f, --force', '기존 파일 덮어쓰기', false)
     .action(async (opts: { config: string; force: boolean }) => {
@@ -133,17 +133,17 @@ export function buildCli(): Command {
           telegram_chat_id: telegramChatId,
         },
         headless: answers.headless,
-        db_path: path.join(os.homedir(), '.damn-my-slow-kt', 'history.db'),
+        db_path: getDefaultConfig().db_path,
       };
 
-      // config.yaml 저장
+      // 설정 파일 저장
       const dir = path.dirname(configPath);
       if (dir && dir !== '.') fs.mkdirSync(dir, { recursive: true });
       saveConfig(cfg, configPath);
 
       console.log(`\n${chalk.green(`✅ 설정 파일 생성 완료: ${configPath}`)}`);
       console.log(
-        chalk.dim('주의: config.yaml에는 비밀번호가 포함됩니다. .gitignore에 추가되어 있습니다.')
+        chalk.dim(`주의: ${configPath} 에는 비밀번호가 포함됩니다.`)
       );
 
       // 자동 스케줄 설치 여부 물어보기
@@ -236,7 +236,7 @@ export function buildCli(): Command {
 
       if (!cfg.credentials.id || !cfg.credentials.password) {
         console.error(chalk.red('❌ KT 계정 정보가 설정되지 않았습니다.'));
-        console.error('config.yaml에서 credentials.id와 credentials.password를 설정하세요.');
+        console.error(`${opts.config}에서 credentials.id와 credentials.password를 설정하세요.`);
         process.exit(1);
       }
 

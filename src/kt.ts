@@ -164,7 +164,7 @@ export class KTProvider {
     const { id, password } = this.config.credentials;
 
     if (!id || !password) {
-      throw new Error('KT 계정 정보가 설정되지 않았습니다. config.yaml을 확인하세요.');
+      throw new Error('KT 계정 정보가 설정되지 않았습니다. 설정 파일을 확인하세요.');
     }
 
     const url = page.url();
