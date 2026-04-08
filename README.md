@@ -21,6 +21,17 @@ KT는 SLA 기준(계약 속도의 50%)을 미달하면 **측정한 날의 요금
 
 ## 시작하기
 
+### 1. KT 속도측정 프로그램 설치 (최초 1회)
+
+SLA 측정을 위해 KT 공식 속도측정 프로그램이 필요합니다.
+
+- **macOS**: [ktspeed.pkg 다운로드](https://speed.kt.com/file/ktspeed.pkg) 설치
+- **Windows**: [speed.kt.com](https://speed.kt.com) → 속도측정 → 품질보증(SLA) 테스트 진입 후 안내에 따라 설치
+
+> ⚠️ **Windows는 아직 테스트되지 않았습니다.** macOS에서만 동작이 검증되었습니다.
+
+### 2. 초기 설정
+
 ```bash
 npx -y damn-my-slow-kt@latest init
 ```
@@ -121,6 +132,7 @@ cron으로 자동 실행하려면 `/etc/crontab`에 직접 등록:
 | 환경 | OS | 상태 |
 |------|-----|------|
 | macOS (Apple Silicon) | macOS 15+ | ✅ 네이티브 실행 |
+| Windows | Windows 10/11 | ⚠️ 미테스트 |
 | GitHub Actions | Ubuntu (Node 20/22/24) | ✅ 웹페이지 로드 CI (속도테스트 프로그램 설치 불가로 속도 측정은 불가능) |
 
 ---

@@ -74,6 +74,8 @@ export function buildCli(): Command {
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 초기 설정\n'));
       console.log(chalk.yellow('⚠️  KT SLA 측정은 유선(LAN) 연결에서만 유효합니다.'));
       console.log(chalk.yellow('   Wi-Fi로 측정하면 감면 신청이 거부될 수 있습니다.'));
+      console.log('');
+      printSpeedAgentInstallGuide();
       console.log(chalk.dim(`\n📋 KT 품질보장제도(SLA) 공식 안내:`));
       console.log(chalk.dim('   https://ermsweb.kt.com/search/faq/faqAnswerM.do?kbId=KNOW0002301063\n'));
 
@@ -293,6 +295,9 @@ export function buildCli(): Command {
       console.log(chalk.cyan('\n🐌 damn-my-slow-kt 실행'));
       console.log(`KT | ${opts.dryRun ? 'dry-run 모드' : '감면 신청 활성화'}`);
       console.log(chalk.dim('유선(LAN) 연결 확인 필수 — Wi-Fi 측정은 SLA 인정 불가'));
+      if (isInteractive) {
+        printSpeedAgentInstallGuide();
+      }
       if (todayCount > 0) {
         console.log(chalk.dim(`오늘 ${todayCount + 1}번째 측정 (최대 ${maxAttempts}회)`));
       }
@@ -520,6 +525,31 @@ function printRunResult(record: {
   }
 
   console.log(headerColor(`  └${'─'.repeat(46)}┘`));
+}
+
+// ─── KT 속도측정 프로그램 설치 안내 ────────────────────────────────
+
+/**
+ * KT SLA 측정을 위해 speed.kt.com의 속도측정 에이전트 설치가 필요.
+ * macOS: ktspeed.pkg, Windows: 사이트에서 직접 설치.
+ */
+function printSpeedAgentInstallGuide(): void {
+  const platform = process.platform;
+
+  console.log(chalk.yellow('\n📦 KT 속도측정 프로그램 사전 설치 필요'));
+  if (platform === 'darwin') {
+    console.log(chalk.dim('   macOS: 아래 링크에서 프로그램을 설치하세요 (최초 1회)'));
+    console.log(chalk.bold('   https://speed.kt.com/file/ktspeed.pkg'));
+  } else if (platform === 'win32') {
+    console.log(chalk.dim('   Windows: 아래 절차를 따라 설치하세요 (최초 1회)'));
+    console.log(chalk.dim('   1. https://speed.kt.com 접속'));
+    console.log(chalk.dim('   2. 속도측정 → 품질보증(SLA) 테스트 클릭'));
+    console.log(chalk.dim('   3. 안내에 따라 속도측정 프로그램 설치'));
+  } else {
+    // Linux/Docker — 별도 에이전트 불필요 (브라우저 기반 측정)
+    console.log(chalk.dim('   Linux: 별도 설치 없이 브라우저 기반으로 측정됩니다.'));
+  }
+  console.log('');
 }
 
 // ─── GitHub Star 요청 ─────────────────────────────────────────────
