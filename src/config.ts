@@ -154,6 +154,18 @@ export function saveConfig(config: Config, configPath?: string): void {
   fs.writeFileSync(cfgPath, (yaml as any).dump(data, { allowUnicode: true }), 'utf8');
 }
 
+/**
+ * run 명령 실행에 필요한 필수 설정이 모두 채워져 있는지 검증.
+ * 누락된 항목이 있으면 필드명 배열을 반환, 모두 있으면 빈 배열.
+ */
+export function validateRequiredFields(config: Config): string[] {
+  const missing: string[] = [];
+  if (!config.credentials.id) missing.push('credentials.id (KT 아이디)');
+  if (!config.credentials.password) missing.push('credentials.password (KT 비밀번호)');
+  if (!config.phone) missing.push('phone (연락처)');
+  return missing;
+}
+
 export function getExampleConfigContent(): string {
   return `# damn-my-slow-kt 설정 파일
 # 주의: 이 파일은 .gitignore에 포함되어 있습니다 (비밀번호 보호)

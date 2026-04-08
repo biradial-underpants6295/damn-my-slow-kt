@@ -26,6 +26,7 @@ import {
   DEFAULT_CONFIG_PATH,
   DATA_DIR,
   Config,
+  validateRequiredFields,
 } from "./config";
 import { SpeedDatabase } from "./db";
 import { KTProvider, SpeedTestResult } from "./kt";
@@ -277,10 +278,14 @@ export function buildCli(): Command {
         // 마이그레이션 체크 (업데이트 후 설정 변경 안내)
         cfg = await checkAndRunMigrations(cfg, opts.config);
 
-        if (!cfg.credentials.id || !cfg.credentials.password) {
-          console.error(chalk.red("❌ KT 계정 정보가 설정되지 않았습니다."));
+        const missingFields = validateRequiredFields(cfg);
+        if (missingFields.length > 0) {
+          console.error(chalk.red("❌ 필수 설정이 누락되었습니다:"));
+          for (const field of missingFields) {
+            console.error(chalk.red(`   • ${field}`));
+          }
           console.error(
-            `${opts.config}에서 credentials.id와 credentials.password를 설정하세요.`,
+            `\n'npx damn-my-slow-kt init' 명령으로 설정을 다시 진행하세요.`,
           );
           process.exit(1);
         }
@@ -388,7 +393,12 @@ export function buildCli(): Command {
         const provider = new KTProvider(cfg);
         const measuredAt = new Date().toISOString();
 
-        console.log(`측정 시작: ${measuredAt.slice(0, 19)}`);
+        const localTime = new Date(measuredAt).toLocaleString('ko-KR', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: false,
+        });
+        console.log(`측정 시작: ${localTime}`);
         if (!cfg.headless) {
           console.log(chalk.dim("브라우저 창이 열립니다 (headless=false)"));
         }
