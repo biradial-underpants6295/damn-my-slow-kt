@@ -91,11 +91,48 @@ npx -y damn-my-slow-kt@latest init
 
 ---
 
+## NAS / Docker에서 실행
+
+Synology NAS 등 시스템 라이브러리가 부족한 환경에서는 Playwright 공식 Docker 이미지를 사용:
+
+```bash
+# 1. 먼저 호스트에서 설정 파일 생성
+npx -y damn-my-slow-kt@latest init
+
+# 2. Docker로 실행
+docker run --rm \
+  -v ~/.damn-my-slow-isp:/root/.damn-my-slow-isp \
+  mcr.microsoft.com/playwright:v1.52.0-noble \
+  npx -y damn-my-slow-kt@latest run
+```
+
+cron으로 자동 실행하려면 `/etc/crontab`에 직접 등록:
+
+```bash
+# 매일 04:00, 06:00, ..., 22:00 (2시간 간격 10회)
+0  4  * * * root  docker run --rm -v /var/services/homes/admin/.damn-my-slow-isp:/root/.damn-my-slow-isp mcr.microsoft.com/playwright:v1.52.0-noble npx -y damn-my-slow-kt@latest run >> /var/services/homes/admin/.damn-my-slow-isp/cron.log 2>&1
+0  6  * * * root  docker run --rm -v /var/services/homes/admin/.damn-my-slow-isp:/root/.damn-my-slow-isp mcr.microsoft.com/playwright:v1.52.0-noble npx -y damn-my-slow-kt@latest run >> /var/services/homes/admin/.damn-my-slow-isp/cron.log 2>&1
+```
+
+---
+
+## 테스트 완료 환경
+
+| 환경 | OS | 상태 |
+|------|-----|------|
+| macOS (Apple Silicon) | macOS 15+ | ✅ 네이티브 실행 |
+| Linux (x86_64) | Ubuntu 22.04+ | ✅ 네이티브 실행 |
+| Synology NAS | DSM 7.x (Docker) | ✅ Playwright 공식 이미지 |
+| GitHub Actions | Ubuntu (Node 20/22/24) | ✅ CI 통과 |
+
+---
+
 ## 요구사항
 
 - Node.js 20+ (22+ 권장 — native SQLite 지원)
 - KT 인터넷 계정
 - 유선(LAN) 연결
+- NAS/서버: Docker 필요 (Playwright 시스템 라이브러리 의존성)
 
 ---
 
