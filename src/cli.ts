@@ -173,39 +173,6 @@ export function buildCli(): Command {
         ]);
 
         if (installSched) {
-          const { schedTime } = await inquirer.prompt([
-            {
-              type: 'list',
-              name: 'schedTime',
-              message: '측정 시간을 선택하세요:',
-              choices: [
-                { name: '04:00 (새벽 4시 - 권장)', value: '04:00' },
-                { name: '02:00 (새벽 2시)', value: '02:00' },
-                { name: '03:00 (새벽 3시)', value: '03:00' },
-                { name: '사용자 지정', value: 'custom' },
-              ],
-              default: '04:00',
-            },
-          ]);
-
-          let finalTime = schedTime;
-          if (schedTime === 'custom') {
-            const { customTime } = await inquirer.prompt([
-              {
-                type: 'input',
-                name: 'customTime',
-                message: '시간 입력 (HH:MM):',
-                default: '04:00',
-                validate: (v: string) =>
-                  /^\d{2}:\d{2}$/.test(v) || 'HH:MM 형식으로 입력하세요.',
-              },
-            ]);
-            finalTime = customTime;
-          }
-
-          cfg.schedule.time = finalTime;
-          saveConfig(cfg, configPath);
-
           try {
             installSchedule(cfg);
           } catch (e: unknown) {
