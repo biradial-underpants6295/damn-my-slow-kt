@@ -191,6 +191,8 @@ export function buildCli(): Command {
 
       console.log(chalk.dim('\n지금 테스트하려면 실행해보세요:'));
       console.log(chalk.bold('  npx damn-my-slow-kt run'));
+
+      await askForStar();
     });
 
   // ─────────────────────────────────────
@@ -330,8 +332,6 @@ export function buildCli(): Command {
         process.exit(1);
       }
 
-      // GitHub 스타 요청 (interactive + 첫 실행 시에만)
-      await askForStar();
     });
 
   // ─────────────────────────────────────
