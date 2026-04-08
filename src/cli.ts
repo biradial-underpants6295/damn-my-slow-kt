@@ -28,6 +28,13 @@ import {
   Config,
   validateRequiredFields,
 } from "./config";
+import {
+  isInsideDocker,
+  isDockerAvailable,
+  isSharedLibraryError,
+  reExecInDocker,
+  printDockerInstallGuide,
+} from "./docker";
 import { SpeedDatabase } from "./db";
 import { KTProvider, SpeedTestResult } from "./kt";
 import { sendNotifications } from "./notify";
@@ -433,7 +440,33 @@ export function buildCli(): Command {
           console.log(chalk.dim("브라우저 창이 열립니다 (headless=false)"));
         }
 
-        const result: SpeedTestResult = await provider.run(opts.dryRun);
+        let result: SpeedTestResult;
+        try {
+          result = await provider.run(opts.dryRun);
+        } catch (e: unknown) {
+          const err = e instanceof Error ? e : new Error(String(e));
+
+          // Linux에서 shared library 누락 → Docker 자동 전환
+          if (process.platform === 'linux' && isSharedLibraryError(err)) {
+            if (isInsideDocker()) {
+              console.error(chalk.red('\n❌ Docker 내에서도 Chromium 실행 실패'));
+              console.error(chalk.dim(`   ${err.message}`));
+              db.close();
+              process.exit(1);
+            }
+
+            if (isDockerAvailable()) {
+              db.close();
+              reExecInDocker();
+            }
+
+            printDockerInstallGuide(err.message);
+            db.close();
+            process.exit(1);
+          }
+
+          throw e;
+        }
 
         const record = {
           isp: "kt",
@@ -718,13 +751,18 @@ function printSpeedAgentInstallGuide(): void {
     console.log(chalk.dim("   3. 안내에 따라 속도측정 프로그램 설치"));
     console.log("");
   } else {
-    // Linux/Docker — KT 속도측정 프로그램이 macOS/Windows만 지원
     console.log(
-      chalk.red("\n❌ KT SLA 속도측정은 macOS 또는 Windows에서만 가능합니다."),
+      chalk.yellow("\n⚠️  KT 속도측정 프로그램이 Linux를 공식 지원하지 않습니다."),
     );
-    console.log(
-      chalk.dim("   KT 속도측정 프로그램이 Linux를 지원하지 않습니다."),
-    );
+    if (isInsideDocker()) {
+      console.log(
+        chalk.dim("   🐳 Docker 컨테이너에서 실행 중 — 웹 측정을 시도합니다."),
+      );
+    } else {
+      console.log(
+        chalk.dim("   Chromium 실행 실패 시 Docker로 자동 전환됩니다."),
+      );
+    }
     console.log("");
   }
 }
