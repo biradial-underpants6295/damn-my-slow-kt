@@ -120,7 +120,8 @@ export function buildCli(): Command {
         ),
       );
 
-      const answers = await inquirer.prompt([
+      // 1단계: KT 아이디 먼저 수집
+      const idAnswer = await inquirer.prompt([
         {
           type: "input",
           name: "id",
@@ -128,6 +129,17 @@ export function buildCli(): Command {
           default: existing?.credentials.id || undefined,
           validate: (v: string) => v.trim() !== "" || "아이디를 입력하세요.",
         },
+      ]);
+
+      // 비밀번호 입력 직전 — 입력하면서 볼 수 있도록 소스 코드 링크 안내 (회색)
+      // 비밀번호는 로컬 YAML 설정 파일에만 저장되며, 외부 서버로 전송되지 않음
+      console.log(chalk.dim("   🔍 비밀번호는 로컬에만 저장됩니다. 무서우시면 직접 확인하세요:"));
+      console.log(chalk.dim("      저장 방식: https://github.com/kargnas/damn-my-slow-kt/blob/main/src/config.ts#L124"));
+      console.log(chalk.dim("      로그인 로직: https://github.com/kargnas/damn-my-slow-kt/blob/main/src/kt.ts#L341"));
+      console.log(chalk.dim("      이 화면 코드: https://github.com/kargnas/damn-my-slow-kt/blob/main/src/cli.ts"));
+
+      // 2단계: 비밀번호 수집
+      const pwAnswer = await inquirer.prompt([
         {
           type: "password",
           name: "password",
@@ -140,6 +152,10 @@ export function buildCli(): Command {
             return v.trim() !== "" || "비밀번호를 입력하세요.";
           },
         },
+      ]);
+
+      // 3단계: 나머지 설정 수집
+      const restAnswers = await inquirer.prompt([
         {
           type: "input",
           name: "phone",
@@ -169,6 +185,9 @@ export function buildCli(): Command {
           default: existing?.headless ?? true,
         },
       ]);
+
+      // 세 단계 응답 합산 — 이후 코드는 기존 answers 변수 구조 그대로 사용
+      const answers = { ...idAnswer, ...pwAnswer, ...restAnswers };
 
       let telegramChatId = existing?.notification.telegram_chat_id || "";
       if (answers.telegram_token) {
